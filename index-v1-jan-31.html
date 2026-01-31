@@ -1,0 +1,1150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expense Tracker Pro</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        body { margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+        .pulse-animation { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // Icon Components
+        const Plus = ({ size = 24 }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+        );
+
+        const Trash2 = ({ size = 24 }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                <line x1="10" y1="11" x2="10" y2="17"></line>
+                <line x1="14" y1="11" x2="14" y2="17"></line>
+            </svg>
+        );
+
+        const Download = ({ size = 24 }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+        );
+
+        const Upload = ({ size = 24 }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+        );
+
+        const Settings = ({ size = 24 }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M12 1v6m0 6v6m0-18l-3 3m6 0l-3-3m-6 9h6m6 0h6m-18 0l3 3m0-6l-3 3"></path>
+            </svg>
+        );
+
+        const ChevronDown = ({ size = 24 }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+        );
+
+        const ChevronUp = ({ size = 24 }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="18 15 12 9 6 15"></polyline>
+            </svg>
+        );
+
+        const Eye = ({ size = 24 }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+        );
+
+        const EyeOff = ({ size = 24 }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                <line x1="1" y1="1" x2="23" y2="23"></line>
+            </svg>
+        );
+
+        const Search = ({ size = 24 }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <path d="m21 21-4.35-4.35"></path>
+            </svg>
+        );
+
+        const BarChart = ({ size = 24 }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="20" x2="12" y2="10"></line>
+                <line x1="18" y1="20" x2="18" y2="4"></line>
+                <line x1="6" y1="20" x2="6" y2="16"></line>
+            </svg>
+        );
+
+        const Home = ({ size = 24 }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                <polyline points="9 22 9 12 15 12 15 22"></polyline>
+            </svg>
+        );
+
+        const Calendar = ({ size = 24 }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+            </svg>
+        );
+
+        const X = ({ size = 24 }) => (
+            <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+        );
+
+        function ExpenseTracker() {
+            const [transactions, setTransactions] = useState([]);
+            const [category, setCategory] = useState('');
+            const [type, setType] = useState('Expense');
+            const [amount, setAmount] = useState('');
+            const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+            const [showForm, setShowForm] = useState(false);
+            const [showSettings, setShowSettings] = useState(false);
+            const [sheetUrl, setSheetUrl] = useState(localStorage.getItem('sheetUrl') || '');
+            const [isConnected, setIsConnected] = useState(!!localStorage.getItem('sheetUrl'));
+            const [isSyncing, setIsSyncing] = useState(false);
+            const [lastSync, setLastSync] = useState(localStorage.getItem('lastSync') || null);
+            const [groupBy, setGroupBy] = useState('day');
+            const [expandedGroups, setExpandedGroups] = useState({});
+            
+            // New state for enhanced features
+            const [currentTab, setCurrentTab] = useState('home');
+            const [showTotalExpense, setShowTotalExpense] = useState(false);
+            const [expandAllCategories, setExpandAllCategories] = useState(false);
+            const [searchQuery, setSearchQuery] = useState('');
+            const [showSearch, setShowSearch] = useState(false);
+            const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+            const [storagePermissionGranted, setStoragePermissionGranted] = useState(
+                localStorage.getItem('storagePermission') === 'granted'
+            );
+            const chartRef = useRef(null);
+            const chartInstance = useRef(null);
+
+            // Request persistent storage permission on first load
+            useEffect(() => {
+                if (!storagePermissionGranted && !localStorage.getItem('storagePermissionAsked')) {
+                    const granted = window.confirm(
+                        '📱 Expense Tracker needs permission to save your data securely on your device.\n\n' +
+                        'This ensures your data persists even if browser cache is cleared.\n\n' +
+                        'Your data will also sync with Google Sheets when connected.\n\n' +
+                        'Grant permission?'
+                    );
+                    
+                    localStorage.setItem('storagePermissionAsked', 'true');
+                    
+                    if (granted) {
+                        localStorage.setItem('storagePermission', 'granted');
+                        setStoragePermissionGranted(true);
+                        
+                        // Request persistent storage if available
+                        if (navigator.storage && navigator.storage.persist) {
+                            navigator.storage.persist().then(persisted => {
+                                console.log('Persistent storage:', persisted);
+                            });
+                        }
+                    } else {
+                        localStorage.setItem('storagePermission', 'denied');
+                    }
+                }
+            }, []);
+
+            // Load transactions from localStorage
+            useEffect(() => {
+                const saved = localStorage.getItem('expenseData');
+                if (saved) {
+                    setTransactions(JSON.parse(saved));
+                }
+            }, []);
+
+            // Save transactions to localStorage
+            useEffect(() => {
+                if (transactions.length > 0) {
+                    localStorage.setItem('expenseData', JSON.stringify(transactions));
+                }
+            }, [transactions]);
+
+            const saveSheetUrl = () => {
+                if (sheetUrl.trim()) {
+                    localStorage.setItem('sheetUrl', sheetUrl.trim());
+                    setIsConnected(true);
+                    alert('✅ Google Sheet connected! Your data will now sync automatically.');
+                    setShowSettings(false);
+                } else {
+                    alert('Please enter a valid URL');
+                }
+            };
+
+            const disconnectSheet = () => {
+                if (confirm('Disconnect from Google Sheet? (Your local data will remain safe)')) {
+                    localStorage.removeItem('sheetUrl');
+                    setSheetUrl('');
+                    setIsConnected(false);
+                    alert('Disconnected from Google Sheet');
+                }
+            };
+
+            const syncToSheet = async (newTransaction = null) => {
+                const url = localStorage.getItem('sheetUrl');
+                if (!url) return;
+
+                setIsSyncing(true);
+                try {
+                    const dataToSync = newTransaction || transactions[transactions.length - 1];
+                    if (!dataToSync) return;
+
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(dataToSync)
+                    });
+
+                    const syncTime = new Date().toISOString();
+                    localStorage.setItem('lastSync', syncTime);
+                    setLastSync(syncTime);
+                } catch (error) {
+                    console.error('Sync failed:', error);
+                } finally {
+                    setIsSyncing(false);
+                }
+            };
+
+            const addTransaction = () => {
+                if (!category.trim() || !amount || parseFloat(amount) <= 0) {
+                    alert('Please fill all fields correctly');
+                    return;
+                }
+
+                const newTransaction = {
+                    id: Date.now(),
+                    category: category.trim(),
+                    type,
+                    amount: parseFloat(amount),
+                    date,
+                    timestamp: new Date().toISOString()
+                };
+
+                setTransactions(prev => [newTransaction, ...prev]);
+                
+                if (isConnected) {
+                    syncToSheet(newTransaction);
+                }
+
+                setCategory('');
+                setAmount('');
+                setDate(new Date().toISOString().split('T')[0]);
+                setShowForm(false);
+            };
+
+            const deleteTransaction = (id) => {
+                if (confirm('Delete this transaction?')) {
+                    setTransactions(prev => prev.filter(t => t.id !== id));
+                }
+            };
+
+            const exportToCSV = () => {
+                const headers = ['Date', 'Category', 'Type', 'Amount'];
+                const rows = transactions.map(t => [
+                    t.date,
+                    t.category,
+                    t.type,
+                    t.amount
+                ]);
+
+                const csv = [
+                    headers.join(','),
+                    ...rows.map(row => row.join(','))
+                ].join('\n');
+
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `expenses_${new Date().toISOString().split('T')[0]}.csv`;
+                a.click();
+            };
+
+            const importFromCSV = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const csv = event.target.result;
+                    const lines = csv.split('\n').slice(1);
+                    
+                    const imported = lines
+                        .filter(line => line.trim())
+                        .map((line, index) => {
+                            const [date, category, type, amount] = line.split(',');
+                            return {
+                                id: Date.now() + index,
+                                date: date.trim(),
+                                category: category.trim(),
+                                type: type.trim(),
+                                amount: parseFloat(amount.trim()),
+                                timestamp: new Date().toISOString()
+                            };
+                        });
+
+                    setTransactions(prev => [...imported, ...prev]);
+                    alert(`✅ Imported ${imported.length} transactions`);
+                };
+
+                reader.readAsText(file);
+            };
+
+            // Get current month transactions
+            const getCurrentMonthTransactions = () => {
+                const currentMonth = new Date().toISOString().slice(0, 7);
+                return transactions.filter(t => t.date.startsWith(currentMonth));
+            };
+
+            // Get transactions for selected month
+            const getMonthTransactions = (month) => {
+                return transactions.filter(t => t.date.startsWith(month));
+            };
+
+            // Calculate total expense for current month
+            const currentMonthTotal = getCurrentMonthTransactions()
+                .filter(t => t.type === 'Expense')
+                .reduce((sum, t) => sum + t.amount, 0);
+
+            // Get all unique months from transactions
+            const getAllMonths = () => {
+                const months = [...new Set(transactions.map(t => t.date.slice(0, 7)))];
+                return months.sort().reverse();
+            };
+
+            // Calculate category totals for current month
+            const getCategoryTotals = (month = null) => {
+                const monthTransactions = month ? getMonthTransactions(month) : getCurrentMonthTransactions();
+                const categoryTotals = {};
+                
+                monthTransactions
+                    .filter(t => t.type === 'Expense')
+                    .forEach(t => {
+                        categoryTotals[t.category] = (categoryTotals[t.category] || 0) + t.amount;
+                    });
+
+                return Object.entries(categoryTotals)
+                    .map(([category, amount]) => ({ category, amount }))
+                    .sort((a, b) => b.amount - a.amount);
+            };
+
+            // Search functionality
+            const searchTransactions = () => {
+                if (!searchQuery.trim()) return transactions;
+                
+                const query = searchQuery.toLowerCase();
+                return transactions.filter(t => 
+                    t.category.toLowerCase().includes(query) ||
+                    t.type.toLowerCase().includes(query) ||
+                    t.amount.toString().includes(query) ||
+                    new Date(t.date).toLocaleDateString('en-IN').includes(query)
+                );
+            };
+
+            // Group transactions
+            const getGroupedTransactions = () => {
+                const transactionsToGroup = showSearch && searchQuery ? searchTransactions() : transactions;
+                
+                const grouped = {};
+                transactionsToGroup.forEach(transaction => {
+                    const date = new Date(transaction.date);
+                    let key;
+
+                    if (groupBy === 'day') {
+                        key = date.toLocaleDateString('en-IN', { 
+                            year: 'numeric', 
+                            month: 'short', 
+                            day: 'numeric' 
+                        });
+                    } else if (groupBy === 'week') {
+                        const weekStart = new Date(date);
+                        weekStart.setDate(date.getDate() - date.getDay());
+                        key = `Week of ${weekStart.toLocaleDateString('en-IN', { 
+                            month: 'short', 
+                            day: 'numeric' 
+                        })}`;
+                    } else {
+                        key = date.toLocaleDateString('en-IN', { 
+                            year: 'numeric', 
+                            month: 'long' 
+                        });
+                    }
+
+                    if (!grouped[key]) {
+                        grouped[key] = [];
+                    }
+                    grouped[key].push(transaction);
+                });
+
+                return grouped;
+            };
+
+            const groupedTransactions = getGroupedTransactions();
+
+            const toggleGroup = (groupKey) => {
+                setExpandedGroups(prev => ({
+                    ...prev,
+                    [groupKey]: !prev[groupKey]
+                }));
+            };
+
+            // Calculate total and savings
+            const totalExpense = transactions
+                .filter(t => t.type === 'Expense')
+                .reduce((sum, t) => sum + t.amount, 0);
+
+            const totalSavings = transactions
+                .filter(t => t.type === 'Save')
+                .reduce((sum, t) => sum + t.amount, 0);
+
+            const totalIncome = transactions
+                .filter(t => t.type === 'Income')
+                .reduce((sum, t) => sum + t.amount, 0);
+
+            const balance = totalIncome - totalExpense + totalSavings;
+
+            // Render pie chart for reporting
+            useEffect(() => {
+                if (currentTab === 'reports' && chartRef.current) {
+                    const categoryData = getCategoryTotals(selectedMonth);
+                    
+                    if (chartInstance.current) {
+                        chartInstance.current.destroy();
+                    }
+
+                    if (categoryData.length === 0) return;
+
+                    const ctx = chartRef.current.getContext('2d');
+                    
+                    const colors = [
+                        '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+                        '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF6384'
+                    ];
+
+                    chartInstance.current = new Chart(ctx, {
+                        type: 'pie',
+                        data: {
+                            labels: categoryData.map(d => d.category),
+                            datasets: [{
+                                data: categoryData.map(d => d.amount),
+                                backgroundColor: colors.slice(0, categoryData.length),
+                                borderWidth: 2,
+                                borderColor: '#fff'
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            plugins: {
+                                legend: {
+                                    position: 'bottom',
+                                    labels: {
+                                        padding: 15,
+                                        font: {
+                                            size: 12
+                                        }
+                                    }
+                                },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(context) {
+                                            const label = context.label || '';
+                                            const value = context.parsed || 0;
+                                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                            const percentage = ((value / total) * 100).toFixed(1);
+                                            return `${label}: ₹${value.toLocaleString()} (${percentage}%)`;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+
+                return () => {
+                    if (chartInstance.current) {
+                        chartInstance.current.destroy();
+                    }
+                };
+            }, [currentTab, selectedMonth, transactions]);
+
+            // Render different tabs
+            const renderContent = () => {
+                if (currentTab === 'home') {
+                    return (
+                        <>
+                            {/* Summary Cards */}
+                            <div className="grid grid-cols-2 gap-4 mb-6">
+                                <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-2xl p-4 text-white shadow-lg">
+                                    <div className="text-sm opacity-90 mb-1">Total Expense</div>
+                                    <div className="text-2xl font-bold">₹{totalExpense.toLocaleString()}</div>
+                                </div>
+                                <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-2xl p-4 text-white shadow-lg">
+                                    <div className="text-sm opacity-90 mb-1">Savings</div>
+                                    <div className="text-2xl font-bold">₹{totalSavings.toLocaleString()}</div>
+                                </div>
+                            </div>
+
+                            {/* Current Month Total with Eye Toggle */}
+                            <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <div className="text-sm text-gray-600 mb-1">
+                                            {new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })} Expense
+                                        </div>
+                                        <div className="text-3xl font-bold text-indigo-600">
+                                            {showTotalExpense ? `₹${currentMonthTotal.toLocaleString()}` : '₹ •••••'}
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => setShowTotalExpense(!showTotalExpense)}
+                                        className="p-3 hover:bg-gray-100 rounded-xl transition active:scale-95"
+                                    >
+                                        {showTotalExpense ? <Eye size={24} /> : <EyeOff size={24} />}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Category Summary */}
+                            <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="text-lg font-bold text-gray-800">Category Breakdown</h3>
+                                    <button
+                                        onClick={() => setExpandAllCategories(!expandAllCategories)}
+                                        className="text-sm text-indigo-600 font-semibold"
+                                    >
+                                        {expandAllCategories ? 'Show Less' : 'Show All'}
+                                    </button>
+                                </div>
+                                
+                                {getCategoryTotals().slice(0, expandAllCategories ? undefined : 3).map((cat, idx) => (
+                                    <div key={idx} className="flex items-center justify-between py-3 border-b last:border-b-0">
+                                        <div className="flex items-center gap-3">
+                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                                                idx === 0 ? 'bg-red-100 text-red-600' :
+                                                idx === 1 ? 'bg-blue-100 text-blue-600' :
+                                                'bg-purple-100 text-purple-600'
+                                            }`}>
+                                                {idx + 1}
+                                            </div>
+                                            <div>
+                                                <div className="font-semibold text-gray-800">{cat.category}</div>
+                                                <div className="text-sm text-gray-500">
+                                                    {((cat.amount / currentMonthTotal) * 100).toFixed(1)}% of total
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="text-lg font-bold text-gray-800">
+                                            ₹{cat.amount.toLocaleString()}
+                                        </div>
+                                    </div>
+                                ))}
+                                
+                                {getCategoryTotals().length === 0 && (
+                                    <div className="text-center py-8 text-gray-400">
+                                        No expenses this month yet
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Add Transaction Button */}
+                            <button
+                                onClick={() => setShowForm(true)}
+                                className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-semibold shadow-lg flex items-center justify-center gap-2 active:scale-95 transition mb-6"
+                            >
+                                <Plus size={24} />
+                                Add Transaction
+                            </button>
+
+                            {/* Transaction Form */}
+                            {showForm && (
+                                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end justify-center z-50 p-0">
+                                    <div className="bg-white rounded-t-3xl w-full max-w-lg p-6 space-y-4 animate-slide-up">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <h2 className="text-2xl font-bold text-gray-800">New Transaction</h2>
+                                            <button
+                                                onClick={() => setShowForm(false)}
+                                                className="p-2 hover:bg-gray-100 rounded-lg"
+                                            >
+                                                <X size={24} />
+                                            </button>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 mb-2">Type</label>
+                                            <div className="flex gap-2">
+                                                {['Expense', 'Save', 'Income'].map(t => (
+                                                    <button
+                                                        key={t}
+                                                        onClick={() => setType(t)}
+                                                        className={`flex-1 py-3 rounded-xl font-semibold transition ${
+                                                            type === t
+                                                                ? 'bg-indigo-600 text-white'
+                                                                : 'bg-gray-100 text-gray-700'
+                                                        }`}
+                                                    >
+                                                        {t}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+                                            <input
+                                                type="text"
+                                                value={category}
+                                                onChange={(e) => setCategory(e.target.value)}
+                                                placeholder="e.g., Food, Transport, Rent"
+                                                className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-indigo-600 focus:outline-none"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 mb-2">Amount (₹)</label>
+                                            <input
+                                                type="number"
+                                                value={amount}
+                                                onChange={(e) => setAmount(e.target.value)}
+                                                placeholder="0"
+                                                className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-indigo-600 focus:outline-none"
+                                            />
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-sm font-semibold text-gray-700 mb-2">Date</label>
+                                            <input
+                                                type="date"
+                                                value={date}
+                                                onChange={(e) => setDate(e.target.value)}
+                                                className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-indigo-600 focus:outline-none"
+                                            />
+                                        </div>
+
+                                        <div className="flex gap-2 pt-4">
+                                            <button
+                                                onClick={addTransaction}
+                                                className="flex-1 bg-indigo-600 text-white py-4 rounded-xl font-semibold shadow-lg active:scale-95 transition"
+                                            >
+                                                Add Transaction
+                                            </button>
+                                            <button
+                                                onClick={() => setShowForm(false)}
+                                                className="px-6 bg-gray-200 text-gray-700 py-4 rounded-xl font-semibold active:scale-95 transition"
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Recent Transactions */}
+                            <div className="bg-white rounded-2xl shadow-lg p-6">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h2 className="text-xl font-bold text-gray-800">Recent Transactions</h2>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => setGroupBy('day')}
+                                            className={`px-3 py-1 rounded-lg text-sm font-semibold ${
+                                                groupBy === 'day' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'
+                                            }`}
+                                        >
+                                            Day
+                                        </button>
+                                        <button
+                                            onClick={() => setGroupBy('week')}
+                                            className={`px-3 py-1 rounded-lg text-sm font-semibold ${
+                                                groupBy === 'week' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'
+                                            }`}
+                                        >
+                                            Week
+                                        </button>
+                                        <button
+                                            onClick={() => setGroupBy('month')}
+                                            className={`px-3 py-1 rounded-lg text-sm font-semibold ${
+                                                groupBy === 'month' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'
+                                            }`}
+                                        >
+                                            Month
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                {transactions.length === 0 ? (
+                                    <div className="text-center py-12 text-gray-400">
+                                        <p className="text-lg mb-2">No transactions yet</p>
+                                        <p className="text-sm">Tap "Add Transaction" to get started!</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {Object.entries(groupedTransactions).map(([groupKey, groupTransactions]) => {
+                                            const groupTotal = groupTransactions.reduce((sum, t) => sum + (t.type === 'Expense' ? t.amount : 0), 0);
+                                            const isExpanded = expandedGroups[groupKey];
+                                            
+                                            return (
+                                                <div key={groupKey} className="border border-gray-200 rounded-xl overflow-hidden">
+                                                    <button
+                                                        onClick={() => toggleGroup(groupKey)}
+                                                        className="w-full bg-gray-50 hover:bg-gray-100 p-4 flex items-center justify-between transition"
+                                                    >
+                                                        <div className="text-left">
+                                                            <div className="font-semibold text-gray-800">{groupKey}</div>
+                                                            <div className="text-sm text-gray-600">
+                                                                {groupTransactions.length} transaction{groupTransactions.length !== 1 ? 's' : ''} • ₹{groupTotal.toLocaleString()}
+                                                            </div>
+                                                        </div>
+                                                        {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                                                    </button>
+                                                    
+                                                    {isExpanded && (
+                                                        <div className="p-2 space-y-2 bg-white">
+                                                            {groupTransactions.map(transaction => (
+                                                                <div
+                                                                    key={transaction.id}
+                                                                    className={`flex items-center justify-between p-4 rounded-xl border-l-4 ${
+                                                                        transaction.type === 'Expense'
+                                                                            ? 'bg-red-50 border-red-500'
+                                                                            : transaction.type === 'Save'
+                                                                            ? 'bg-green-50 border-green-500'
+                                                                            : 'bg-blue-50 border-blue-500'
+                                                                    }`}
+                                                                >
+                                                                    <div className="flex-1">
+                                                                        <div className="font-semibold text-gray-800">{transaction.category}</div>
+                                                                        <div className="text-sm text-gray-600">
+                                                                            {transaction.type} • {new Date(transaction.date).toLocaleDateString('en-IN')}
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className="text-xl font-bold text-gray-800">
+                                                                            ₹{transaction.amount.toLocaleString()}
+                                                                        </div>
+                                                                        <button
+                                                                            onClick={() => deleteTransaction(transaction.id)}
+                                                                            className="text-red-500 p-2 hover:bg-red-100 rounded-lg active:scale-95 transition"
+                                                                        >
+                                                                            <Trash2 size={20} />
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        </>
+                    );
+                }
+
+                if (currentTab === 'history') {
+                    const allMonths = getAllMonths();
+                    
+                    return (
+                        <div className="space-y-4">
+                            <h2 className="text-2xl font-bold text-gray-800 mb-4">Monthly History</h2>
+                            
+                            {allMonths.length === 0 ? (
+                                <div className="bg-white rounded-2xl shadow-lg p-12 text-center text-gray-400">
+                                    <Calendar size={48} className="mx-auto mb-4 opacity-50" />
+                                    <p className="text-lg">No transaction history yet</p>
+                                </div>
+                            ) : (
+                                allMonths.map(month => {
+                                    const monthTransactions = getMonthTransactions(month);
+                                    const monthExpense = monthTransactions
+                                        .filter(t => t.type === 'Expense')
+                                        .reduce((sum, t) => sum + t.amount, 0);
+                                    const categoryData = getCategoryTotals(month);
+                                    const [isExpanded, setIsExpanded] = useState(false);
+
+                                    return (
+                                        <div key={month} className="bg-white rounded-2xl shadow-lg overflow-hidden">
+                                            <button
+                                                onClick={() => setIsExpanded(!isExpanded)}
+                                                className="w-full p-6 flex items-center justify-between hover:bg-gray-50 transition"
+                                            >
+                                                <div className="text-left">
+                                                    <div className="text-lg font-bold text-gray-800">
+                                                        {new Date(month + '-01').toLocaleDateString('en-IN', { 
+                                                            month: 'long', 
+                                                            year: 'numeric' 
+                                                        })}
+                                                    </div>
+                                                    <div className="text-sm text-gray-600 mt-1">
+                                                        {monthTransactions.length} transactions
+                                                    </div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <div className="text-2xl font-bold text-red-600">
+                                                        ₹{monthExpense.toLocaleString()}
+                                                    </div>
+                                                    {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                                                </div>
+                                            </button>
+                                            
+                                            {isExpanded && (
+                                                <div className="border-t p-6 bg-gray-50">
+                                                    <h4 className="font-bold text-gray-800 mb-4">Category Breakdown</h4>
+                                                    <div className="space-y-3">
+                                                        {categoryData.map((cat, idx) => (
+                                                            <div key={idx} className="flex items-center justify-between p-3 bg-white rounded-lg">
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="w-8 h-8 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center font-bold text-sm">
+                                                                        {idx + 1}
+                                                                    </div>
+                                                                    <div>
+                                                                        <div className="font-semibold text-gray-800">{cat.category}</div>
+                                                                        <div className="text-xs text-gray-500">
+                                                                            {((cat.amount / monthExpense) * 100).toFixed(1)}%
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="font-bold text-gray-800">
+                                                                    ₹{cat.amount.toLocaleString()}
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+                    );
+                }
+
+                if (currentTab === 'reports') {
+                    const allMonths = getAllMonths();
+                    const categoryData = getCategoryTotals(selectedMonth);
+                    const monthTotal = getMonthTransactions(selectedMonth)
+                        .filter(t => t.type === 'Expense')
+                        .reduce((sum, t) => sum + t.amount, 0);
+
+                    return (
+                        <div className="space-y-6">
+                            <h2 className="text-2xl font-bold text-gray-800">Spending Reports</h2>
+                            
+                            {/* Month Selector */}
+                            <div className="bg-white rounded-2xl shadow-lg p-6">
+                                <label className="block text-sm font-semibold text-gray-700 mb-3">Select Month</label>
+                                <select
+                                    value={selectedMonth}
+                                    onChange={(e) => setSelectedMonth(e.target.value)}
+                                    className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-indigo-600 focus:outline-none font-semibold"
+                                >
+                                    {allMonths.map(month => (
+                                        <option key={month} value={month}>
+                                            {new Date(month + '-01').toLocaleDateString('en-IN', { 
+                                                month: 'long', 
+                                                year: 'numeric' 
+                                            })}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Total for Selected Month */}
+                            <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-2xl p-6 text-white shadow-lg">
+                                <div className="text-sm opacity-90 mb-1">Total Spending</div>
+                                <div className="text-3xl font-bold">₹{monthTotal.toLocaleString()}</div>
+                                <div className="text-sm opacity-75 mt-2">
+                                    {new Date(selectedMonth + '-01').toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}
+                                </div>
+                            </div>
+
+                            {/* Pie Chart */}
+                            {categoryData.length > 0 ? (
+                                <div className="bg-white rounded-2xl shadow-lg p-6">
+                                    <h3 className="text-lg font-bold text-gray-800 mb-4">Category Distribution</h3>
+                                    <div className="relative" style={{ height: '300px' }}>
+                                        <canvas ref={chartRef}></canvas>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="bg-white rounded-2xl shadow-lg p-12 text-center text-gray-400">
+                                    <BarChart size={48} className="mx-auto mb-4 opacity-50" />
+                                    <p className="text-lg">No expenses for this month</p>
+                                </div>
+                            )}
+
+                            {/* Category List */}
+                            {categoryData.length > 0 && (
+                                <div className="bg-white rounded-2xl shadow-lg p-6">
+                                    <h3 className="text-lg font-bold text-gray-800 mb-4">Detailed Breakdown</h3>
+                                    <div className="space-y-3">
+                                        {categoryData.map((cat, idx) => (
+                                            <div key={idx} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center font-bold">
+                                                        {idx + 1}
+                                                    </div>
+                                                    <div>
+                                                        <div className="font-semibold text-gray-800">{cat.category}</div>
+                                                        <div className="text-sm text-gray-500">
+                                                            {((cat.amount / monthTotal) * 100).toFixed(1)}% of total
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="text-xl font-bold text-gray-800">
+                                                    ₹{cat.amount.toLocaleString()}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    );
+                }
+            };
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 pb-24">
+                    {/* Header */}
+                    <div className="bg-white shadow-sm sticky top-0 z-40">
+                        <div className="max-w-lg mx-auto px-4 py-4 flex items-center justify-between">
+                            <div>
+                                <h1 className="text-2xl font-bold text-gray-800">Expense Tracker Pro</h1>
+                                <p className="text-sm text-gray-500">
+                                    {isConnected ? (
+                                        <span className="flex items-center gap-1">
+                                            <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                                            {isSyncing ? 'Syncing...' : 'Connected'}
+                                        </span>
+                                    ) : (
+                                        'Not connected'
+                                    )}
+                                </p>
+                            </div>
+                            <div className="flex gap-2">
+                                {/* Search Button */}
+                                <button
+                                    onClick={() => setShowSearch(!showSearch)}
+                                    className={`p-3 rounded-xl transition ${
+                                        showSearch ? 'bg-indigo-600 text-white' : 'bg-gray-100 hover:bg-gray-200'
+                                    }`}
+                                >
+                                    <Search size={20} />
+                                </button>
+                                
+                                {/* Settings Button */}
+                                <button
+                                    onClick={() => setShowSettings(!showSettings)}
+                                    className="p-3 bg-gray-100 hover:bg-gray-200 rounded-xl transition"
+                                >
+                                    <Settings size={20} />
+                                </button>
+                            </div>
+                        </div>
+                        
+                        {/* Search Bar */}
+                        {showSearch && (
+                            <div className="max-w-lg mx-auto px-4 pb-4 animate-slide-down">
+                                <input
+                                    type="text"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    placeholder="Search transactions, categories..."
+                                    className="w-full p-4 border-2 border-indigo-200 rounded-xl focus:border-indigo-600 focus:outline-none"
+                                    autoFocus
+                                />
+                                {searchQuery && (
+                                    <div className="mt-2 text-sm text-gray-600">
+                                        Found {searchTransactions().length} result{searchTransactions().length !== 1 ? 's' : ''}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Settings Panel */}
+                    {showSettings && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end justify-center z-50 p-0">
+                            <div className="bg-white rounded-t-3xl w-full max-w-lg p-6 space-y-4 animate-slide-up max-h-[80vh] overflow-y-auto">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h2 className="text-2xl font-bold text-gray-800">Settings</h2>
+                                    <button
+                                        onClick={() => setShowSettings(false)}
+                                        className="p-2 hover:bg-gray-100 rounded-lg"
+                                    >
+                                        <X size={24} />
+                                    </button>
+                                </div>
+
+                                {/* Google Sheets Connection */}
+                                <div className="bg-indigo-50 rounded-xl p-4">
+                                    <h3 className="font-bold text-gray-800 mb-2">Google Sheets Sync</h3>
+                                    {isConnected ? (
+                                        <div className="space-y-3">
+                                            <div className="flex items-center gap-2 text-sm text-green-700">
+                                                <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                                                Connected & Auto-syncing
+                                            </div>
+                                            {lastSync && (
+                                                <p className="text-xs text-gray-600">
+                                                    Last sync: {new Date(lastSync).toLocaleString('en-IN')}
+                                                </p>
+                                            )}
+                                            <button
+                                                onClick={disconnectSheet}
+                                                className="w-full bg-red-500 text-white py-3 rounded-xl font-semibold"
+                                            >
+                                                Disconnect
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            <input
+                                                type="text"
+                                                value={sheetUrl}
+                                                onChange={(e) => setSheetUrl(e.target.value)}
+                                                placeholder="Paste Google Apps Script URL"
+                                                className="w-full p-3 border-2 border-gray-200 rounded-xl focus:border-indigo-600 focus:outline-none text-sm"
+                                            />
+                                            <button
+                                                onClick={saveSheetUrl}
+                                                className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold"
+                                            >
+                                                Connect
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Export/Import */}
+                                <div className="space-y-3">
+                                    <h3 className="font-bold text-gray-800">Data Management</h3>
+                                    <button
+                                        onClick={exportToCSV}
+                                        className="w-full bg-green-500 text-white py-3 rounded-xl font-semibold flex items-center justify-center gap-2"
+                                    >
+                                        <Download size={20} />
+                                        Export to CSV
+                                    </button>
+                                    <label className="w-full bg-blue-500 text-white py-3 rounded-xl font-semibold flex items-center justify-center gap-2 cursor-pointer">
+                                        <Upload size={20} />
+                                        Import from CSV
+                                        <input
+                                            type="file"
+                                            accept=".csv"
+                                            onChange={importFromCSV}
+                                            className="hidden"
+                                        />
+                                    </label>
+                                </div>
+
+                                {/* Storage Info */}
+                                <div className="bg-gray-50 rounded-xl p-4">
+                                    <h3 className="font-bold text-gray-800 mb-2">Storage Status</h3>
+                                    <div className="text-sm text-gray-600 space-y-1">
+                                        <p>📱 Persistent Storage: {storagePermissionGranted ? '✅ Granted' : '❌ Not Granted'}</p>
+                                        <p>💾 Total Transactions: {transactions.length}</p>
+                                        <p>📊 Data Size: ~{(JSON.stringify(transactions).length / 1024).toFixed(2)} KB</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Main Content */}
+                    <div className="max-w-lg mx-auto px-4 py-6">
+                        {renderContent()}
+                    </div>
+
+                    {/* Bottom Navigation */}
+                    <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40">
+                        <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-around">
+                            <button
+                                onClick={() => setCurrentTab('home')}
+                                className={`flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition ${
+                                    currentTab === 'home'
+                                        ? 'text-indigo-600 bg-indigo-50'
+                                        : 'text-gray-600'
+                                }`}
+                            >
+                                <Home size={24} />
+                                <span className="text-xs font-semibold">Home</span>
+                            </button>
+                            
+                            <button
+                                onClick={() => setCurrentTab('history')}
+                                className={`flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition ${
+                                    currentTab === 'history'
+                                        ? 'text-indigo-600 bg-indigo-50'
+                                        : 'text-gray-600'
+                                }`}
+                            >
+                                <Calendar size={24} />
+                                <span className="text-xs font-semibold">History</span>
+                            </button>
+                            
+                            <button
+                                onClick={() => setCurrentTab('reports')}
+                                className={`flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition ${
+                                    currentTab === 'reports'
+                                        ? 'text-indigo-600 bg-indigo-50'
+                                        : 'text-gray-600'
+                                }`}
+                            >
+                                <BarChart size={24} />
+                                <span className="text-xs font-semibold">Reports</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<ExpenseTracker />, document.getElementById('root'));
+    </script>
+</body>
+</html>
