@@ -150,11 +150,19 @@
             const [searchQuery, setSearchQuery] = useState('');
             const [showSearch, setShowSearch] = useState(false);
             const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+            const [chartType, setChartType] = useState('pie'); // pie, bar, doughnut, line
             const [storagePermissionGranted, setStoragePermissionGranted] = useState(
                 localStorage.getItem('storagePermission') === 'granted'
             );
             const chartRef = useRef(null);
             const chartInstance = useRef(null);
+
+            // Common categories for quick selection
+            const commonCategories = [
+                'Groceries', 'Milk', 'House Maintenance', 'Powerbill', 'Gas Bill',
+                'Vegetables', 'Fruits', 'Stationery', 'Outside-food', 'Personal', 
+                'Medical Shop', 'Petrol', 'Flowers', 'Farm spends', 'Transport'
+            ];
 
             // Request persistent storage permission on first load
             useEffect(() => {
@@ -385,7 +393,8 @@
 
             // Group transactions
             const getGroupedTransactions = () => {
-                const transactionsToGroup = showSearch && searchQuery ? searchTransactions() : transactions;
+                // Use filtered transactions if search is active
+                const transactionsToGroup = (showSearch && searchQuery.trim()) ? searchTransactions() : transactions;
                 
                 const grouped = {};
                 transactionsToGroup.forEach(transaction => {
@@ -422,6 +431,17 @@
             };
 
             const groupedTransactions = getGroupedTransactions();
+            
+            // Auto-expand all groups when searching
+            useEffect(() => {
+                if (showSearch && searchQuery.trim()) {
+                    const newExpandedGroups = {};
+                    Object.keys(groupedTransactions).forEach(key => {
+                        newExpandedGroups[key] = true;
+                    });
+                    setExpandedGroups(newExpandedGroups);
+                }
+            }, [searchQuery, showSearch]);
 
             const toggleGroup = (groupKey) => {
                 setExpandedGroups(prev => ({
@@ -463,8 +483,7 @@
                         '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF6384'
                     ];
 
-                    chartInstance.current = new Chart(ctx, {
-                        type: 'pie',
+                    const chartConfig = {
                         data: {
                             labels: categoryData.map(d => d.category),
                             datasets: [{
@@ -491,7 +510,7 @@
                                     callbacks: {
                                         label: function(context) {
                                             const label = context.label || '';
-                                            const value = context.parsed || 0;
+                                            const value = context.parsed || context.parsed.y || 0;
                                             const total = context.dataset.data.reduce((a, b) => a + b, 0);
                                             const percentage = ((value / total) * 100).toFixed(1);
                                             return `${label}: ₹${value.toLocaleString()} (${percentage}%)`;
@@ -500,7 +519,42 @@
                                 }
                             }
                         }
-                    });
+                    };
+
+                    // Adjust config based on chart type
+                    if (chartType === 'bar') {
+                        chartConfig.type = 'bar';
+                        chartConfig.options.scales = {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    callback: function(value) {
+                                        return '₹' + value.toLocaleString();
+                                    }
+                                }
+                            }
+                        };
+                    } else if (chartType === 'line') {
+                        chartConfig.type = 'line';
+                        chartConfig.data.datasets[0].fill = true;
+                        chartConfig.data.datasets[0].tension = 0.4;
+                        chartConfig.options.scales = {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    callback: function(value) {
+                                        return '₹' + value.toLocaleString();
+                                    }
+                                }
+                            }
+                        };
+                    } else if (chartType === 'doughnut') {
+                        chartConfig.type = 'doughnut';
+                    } else {
+                        chartConfig.type = 'pie';
+                    }
+
+                    chartInstance.current = new Chart(ctx, chartConfig);
                 }
 
                 return () => {
@@ -508,31 +562,19 @@
                         chartInstance.current.destroy();
                     }
                 };
-            }, [currentTab, selectedMonth, transactions]);
+            }, [currentTab, selectedMonth, chartType, transactions]);
 
             // Render different tabs
             const renderContent = () => {
                 if (currentTab === 'home') {
                     return (
                         <>
-                            {/* Summary Cards */}
-                            <div className="grid grid-cols-2 gap-4 mb-6">
-                                <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-2xl p-4 text-white shadow-lg">
-                                    <div className="text-sm opacity-90 mb-1">Total Expense</div>
-                                    <div className="text-2xl font-bold">₹{totalExpense.toLocaleString()}</div>
-                                </div>
-                                <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-2xl p-4 text-white shadow-lg">
-                                    <div className="text-sm opacity-90 mb-1">Savings</div>
-                                    <div className="text-2xl font-bold">₹{totalSavings.toLocaleString()}</div>
-                                </div>
-                            </div>
-
                             {/* Current Month Total with Eye Toggle */}
                             <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
                                 <div className="flex items-center justify-between">
                                     <div>
                                         <div className="text-sm text-gray-600 mb-1">
-                                            {new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })} Expense
+                                            {new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })} Total
                                         </div>
                                         <div className="text-3xl font-bold text-indigo-600">
                                             {showTotalExpense ? `₹${currentMonthTotal.toLocaleString()}` : '₹ •••••'}
@@ -632,12 +674,31 @@
                                         </div>
 
                                         <div>
+                                            <label className="block text-sm font-semibold text-gray-700 mb-2">Quick Select</label>
+                                            <div className="flex flex-wrap gap-2 mb-4">
+                                                {commonCategories.map(cat => (
+                                                    <button
+                                                        key={cat}
+                                                        onClick={() => setCategory(cat)}
+                                                        className={`px-3 py-2 rounded-lg text-sm font-medium transition ${
+                                                            category === cat
+                                                                ? 'bg-indigo-600 text-white'
+                                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                                        }`}
+                                                    >
+                                                        {cat}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div>
                                             <label className="block text-sm font-semibold text-gray-700 mb-2">Category</label>
                                             <input
                                                 type="text"
                                                 value={category}
                                                 onChange={(e) => setCategory(e.target.value)}
-                                                placeholder="e.g., Food, Transport, Rent"
+                                                placeholder="e.g., Food, Transport, Rent or select above"
                                                 className="w-full p-4 border-2 border-gray-200 rounded-xl focus:border-indigo-600 focus:outline-none"
                                             />
                                         </div>
@@ -684,39 +745,56 @@
                             {/* Recent Transactions */}
                             <div className="bg-white rounded-2xl shadow-lg p-6">
                                 <div className="flex items-center justify-between mb-4">
-                                    <h2 className="text-xl font-bold text-gray-800">Recent Transactions</h2>
-                                    <div className="flex gap-2">
-                                        <button
-                                            onClick={() => setGroupBy('day')}
-                                            className={`px-3 py-1 rounded-lg text-sm font-semibold ${
-                                                groupBy === 'day' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'
-                                            }`}
-                                        >
-                                            Day
-                                        </button>
-                                        <button
-                                            onClick={() => setGroupBy('week')}
-                                            className={`px-3 py-1 rounded-lg text-sm font-semibold ${
-                                                groupBy === 'week' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'
-                                            }`}
-                                        >
-                                            Week
-                                        </button>
-                                        <button
-                                            onClick={() => setGroupBy('month')}
-                                            className={`px-3 py-1 rounded-lg text-sm font-semibold ${
-                                                groupBy === 'month' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'
-                                            }`}
-                                        >
-                                            Month
-                                        </button>
+                                    <div>
+                                        <h2 className="text-xl font-bold text-gray-800">
+                                            {showSearch && searchQuery ? 'Search Results' : 'Recent Transactions'}
+                                        </h2>
+                                        {showSearch && searchQuery && (
+                                            <p className="text-sm text-gray-500 mt-1">
+                                                Showing results for "{searchQuery}"
+                                            </p>
+                                        )}
                                     </div>
+                                    {!showSearch && (
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => setGroupBy('day')}
+                                                className={`px-3 py-1 rounded-lg text-sm font-semibold ${
+                                                    groupBy === 'day' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'
+                                                }`}
+                                            >
+                                                Day
+                                            </button>
+                                            <button
+                                                onClick={() => setGroupBy('week')}
+                                                className={`px-3 py-1 rounded-lg text-sm font-semibold ${
+                                                    groupBy === 'week' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'
+                                                }`}
+                                            >
+                                                Week
+                                            </button>
+                                            <button
+                                                onClick={() => setGroupBy('month')}
+                                                className={`px-3 py-1 rounded-lg text-sm font-semibold ${
+                                                    groupBy === 'month' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700'
+                                                }`}
+                                            >
+                                                Month
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                                 
                                 {transactions.length === 0 ? (
                                     <div className="text-center py-12 text-gray-400">
                                         <p className="text-lg mb-2">No transactions yet</p>
                                         <p className="text-sm">Tap "Add Transaction" to get started!</p>
+                                    </div>
+                                ) : Object.keys(groupedTransactions).length === 0 && showSearch && searchQuery ? (
+                                    <div className="text-center py-12 text-gray-400">
+                                        <Search size={48} className="mx-auto mb-4 opacity-50" />
+                                        <p className="text-lg mb-2">No results found</p>
+                                        <p className="text-sm">Try searching with different keywords</p>
                                     </div>
                                 ) : (
                                     <div className="space-y-3">
@@ -788,75 +866,91 @@
                     
                     return (
                         <div className="space-y-4">
-                            <h2 className="text-2xl font-bold text-gray-800 mb-4">Monthly History</h2>
+                            <h2 className="text-2xl font-bold text-gray-800 mb-4">Expense History</h2>
+                            
+                            {/* Total Expense - All Time */}
+                            <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-2xl p-6 text-white shadow-lg">
+                                <div className="text-sm opacity-90 mb-1">Total Expense (All Time)</div>
+                                <div className="text-4xl font-bold mb-2">₹{totalExpense.toLocaleString()}</div>
+                                <div className="text-sm opacity-75">
+                                    Across {allMonths.length} month{allMonths.length !== 1 ? 's' : ''}
+                                </div>
+                            </div>
                             
                             {allMonths.length === 0 ? (
                                 <div className="bg-white rounded-2xl shadow-lg p-12 text-center text-gray-400">
                                     <Calendar size={48} className="mx-auto mb-4 opacity-50" />
-                                    <p className="text-lg">No transaction history yet</p>
+                                    <p className="text-lg mb-2">No transaction history yet</p>
+                                    <p className="text-sm">History will appear here from next month onwards</p>
                                 </div>
                             ) : (
-                                allMonths.map(month => {
-                                    const monthTransactions = getMonthTransactions(month);
-                                    const monthExpense = monthTransactions
-                                        .filter(t => t.type === 'Expense')
-                                        .reduce((sum, t) => sum + t.amount, 0);
-                                    const categoryData = getCategoryTotals(month);
-                                    const [isExpanded, setIsExpanded] = useState(false);
+                                <div>
+                                    <h3 className="text-lg font-bold text-gray-800 mb-3 mt-6">Monthly Breakdown</h3>
+                                    {allMonths.map(month => {
+                                        const monthTransactions = getMonthTransactions(month);
+                                        const monthExpense = monthTransactions
+                                            .filter(t => t.type === 'Expense')
+                                            .reduce((sum, t) => sum + t.amount, 0);
+                                        const monthSavings = monthTransactions
+                                            .filter(t => t.type === 'Save')
+                                            .reduce((sum, t) => sum + t.amount, 0);
+                                        const categoryData = getCategoryTotals(month);
+                                        const [isExpanded, setIsExpanded] = useState(false);
 
-                                    return (
-                                        <div key={month} className="bg-white rounded-2xl shadow-lg overflow-hidden">
-                                            <button
-                                                onClick={() => setIsExpanded(!isExpanded)}
-                                                className="w-full p-6 flex items-center justify-between hover:bg-gray-50 transition"
-                                            >
-                                                <div className="text-left">
-                                                    <div className="text-lg font-bold text-gray-800">
-                                                        {new Date(month + '-01').toLocaleDateString('en-IN', { 
-                                                            month: 'long', 
-                                                            year: 'numeric' 
-                                                        })}
+                                        return (
+                                            <div key={month} className="bg-white rounded-2xl shadow-lg overflow-hidden mb-3">
+                                                <button
+                                                    onClick={() => setIsExpanded(!isExpanded)}
+                                                    className="w-full p-6 flex items-center justify-between hover:bg-gray-50 transition"
+                                                >
+                                                    <div className="text-left">
+                                                        <div className="text-lg font-bold text-gray-800">
+                                                            {new Date(month + '-01').toLocaleDateString('en-IN', { 
+                                                                month: 'long', 
+                                                                year: 'numeric' 
+                                                            })}
+                                                        </div>
+                                                        <div className="text-sm text-gray-600 mt-1">
+                                                            {monthTransactions.length} transactions
+                                                        </div>
                                                     </div>
-                                                    <div className="text-sm text-gray-600 mt-1">
-                                                        {monthTransactions.length} transactions
+                                                    <div className="text-right">
+                                                        <div className="text-2xl font-bold text-red-600">
+                                                            ₹{monthExpense.toLocaleString()}
+                                                        </div>
+                                                        {isExpanded ? <ChevronUp size={20} className="mx-auto mt-1" /> : <ChevronDown size={20} className="mx-auto mt-1" />}
                                                     </div>
-                                                </div>
-                                                <div className="text-right">
-                                                    <div className="text-2xl font-bold text-red-600">
-                                                        ₹{monthExpense.toLocaleString()}
-                                                    </div>
-                                                    {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-                                                </div>
-                                            </button>
-                                            
-                                            {isExpanded && (
-                                                <div className="border-t p-6 bg-gray-50">
-                                                    <h4 className="font-bold text-gray-800 mb-4">Category Breakdown</h4>
-                                                    <div className="space-y-3">
-                                                        {categoryData.map((cat, idx) => (
-                                                            <div key={idx} className="flex items-center justify-between p-3 bg-white rounded-lg">
-                                                                <div className="flex items-center gap-3">
-                                                                    <div className="w-8 h-8 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center font-bold text-sm">
-                                                                        {idx + 1}
-                                                                    </div>
-                                                                    <div>
-                                                                        <div className="font-semibold text-gray-800">{cat.category}</div>
-                                                                        <div className="text-xs text-gray-500">
-                                                                            {((cat.amount / monthExpense) * 100).toFixed(1)}%
+                                                </button>
+                                                
+                                                {isExpanded && (
+                                                    <div className="border-t p-6 bg-gray-50">
+                                                        <h4 className="font-bold text-gray-800 mb-4">Category Breakdown</h4>
+                                                        <div className="space-y-3">
+                                                            {categoryData.map((cat, idx) => (
+                                                                <div key={idx} className="flex items-center justify-between p-3 bg-white rounded-lg">
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className="w-8 h-8 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center font-bold text-sm">
+                                                                            {idx + 1}
+                                                                        </div>
+                                                                        <div>
+                                                                            <div className="font-semibold text-gray-800">{cat.category}</div>
+                                                                            <div className="text-xs text-gray-500">
+                                                                                {((cat.amount / monthExpense) * 100).toFixed(1)}% of month
+                                                                            </div>
                                                                         </div>
                                                                     </div>
+                                                                    <div className="font-bold text-gray-800">
+                                                                        ₹{cat.amount.toLocaleString()}
+                                                                    </div>
                                                                 </div>
-                                                                <div className="font-bold text-gray-800">
-                                                                    ₹{cat.amount.toLocaleString()}
-                                                                </div>
-                                                            </div>
-                                                        ))}
+                                                            ))}
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    );
-                                })
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
                             )}
                         </div>
                     );
@@ -892,6 +986,53 @@
                                 </select>
                             </div>
 
+                            {/* Chart Type Selector */}
+                            <div className="bg-white rounded-2xl shadow-lg p-6">
+                                <label className="block text-sm font-semibold text-gray-700 mb-3">Chart Type</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button
+                                        onClick={() => setChartType('pie')}
+                                        className={`p-3 rounded-xl font-semibold transition ${
+                                            chartType === 'pie'
+                                                ? 'bg-indigo-600 text-white'
+                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        }`}
+                                    >
+                                        🥧 Pie Chart
+                                    </button>
+                                    <button
+                                        onClick={() => setChartType('doughnut')}
+                                        className={`p-3 rounded-xl font-semibold transition ${
+                                            chartType === 'doughnut'
+                                                ? 'bg-indigo-600 text-white'
+                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        }`}
+                                    >
+                                        🍩 Doughnut
+                                    </button>
+                                    <button
+                                        onClick={() => setChartType('bar')}
+                                        className={`p-3 rounded-xl font-semibold transition ${
+                                            chartType === 'bar'
+                                                ? 'bg-indigo-600 text-white'
+                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        }`}
+                                    >
+                                        📊 Bar Chart
+                                    </button>
+                                    <button
+                                        onClick={() => setChartType('line')}
+                                        className={`p-3 rounded-xl font-semibold transition ${
+                                            chartType === 'line'
+                                                ? 'bg-indigo-600 text-white'
+                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        }`}
+                                    >
+                                        📈 Line Chart
+                                    </button>
+                                </div>
+                            </div>
+
                             {/* Total for Selected Month */}
                             <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-2xl p-6 text-white shadow-lg">
                                 <div className="text-sm opacity-90 mb-1">Total Spending</div>
@@ -901,10 +1042,16 @@
                                 </div>
                             </div>
 
-                            {/* Pie Chart */}
+                            {/* Chart Display */}
                             {categoryData.length > 0 ? (
                                 <div className="bg-white rounded-2xl shadow-lg p-6">
-                                    <h3 className="text-lg font-bold text-gray-800 mb-4">Category Distribution</h3>
+                                    <h3 className="text-lg font-bold text-gray-800 mb-4">
+                                        Category Distribution 
+                                        {chartType === 'pie' && ' - Pie Chart'}
+                                        {chartType === 'doughnut' && ' - Doughnut Chart'}
+                                        {chartType === 'bar' && ' - Bar Chart'}
+                                        {chartType === 'line' && ' - Line Chart'}
+                                    </h3>
                                     <div className="relative" style={{ height: '300px' }}>
                                         <canvas ref={chartRef}></canvas>
                                     </div>
@@ -989,17 +1136,30 @@
                         {/* Search Bar */}
                         {showSearch && (
                             <div className="max-w-lg mx-auto px-4 pb-4 animate-slide-down">
-                                <input
-                                    type="text"
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    placeholder="Search transactions, categories..."
-                                    className="w-full p-4 border-2 border-indigo-200 rounded-xl focus:border-indigo-600 focus:outline-none"
-                                    autoFocus
-                                />
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        placeholder="Search transactions, categories..."
+                                        className="w-full p-4 pr-10 border-2 border-indigo-200 rounded-xl focus:border-indigo-600 focus:outline-none"
+                                        autoFocus
+                                    />
+                                    {searchQuery && (
+                                        <button
+                                            onClick={() => setSearchQuery('')}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded-lg"
+                                        >
+                                            <X size={20} className="text-gray-400" />
+                                        </button>
+                                    )}
+                                </div>
                                 {searchQuery && (
-                                    <div className="mt-2 text-sm text-gray-600">
-                                        Found {searchTransactions().length} result{searchTransactions().length !== 1 ? 's' : ''}
+                                    <div className="mt-2 px-1">
+                                        <span className="inline-flex items-center gap-2 text-sm font-semibold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-lg">
+                                            <Search size={16} />
+                                            {searchTransactions().length} result{searchTransactions().length !== 1 ? 's' : ''} found
+                                        </span>
                                     </div>
                                 )}
                             </div>
