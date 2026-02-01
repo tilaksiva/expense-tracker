@@ -895,12 +895,12 @@
                                             .filter(t => t.type === 'Save')
                                             .reduce((sum, t) => sum + t.amount, 0);
                                         const categoryData = getCategoryTotals(month);
-                                        const [isExpanded, setIsExpanded] = useState(false);
+                                        const isExpanded = expandedGroups[month];
 
                                         return (
                                             <div key={month} className="bg-white rounded-2xl shadow-lg overflow-hidden mb-3">
                                                 <button
-                                                    onClick={() => setIsExpanded(!isExpanded)}
+                                                    onClick={() => toggleGroup(month)}
                                                     className="w-full p-6 flex items-center justify-between hover:bg-gray-50 transition"
                                                 >
                                                     <div className="text-left">
