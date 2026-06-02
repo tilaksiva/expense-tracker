@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>Expense Tracker Pro</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <style>
+    :root { color-scheme: light dark; }
+    body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #eef2f7; }
+    * { box-sizing: border-box; }
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .glass { background: rgba(255,255,255,.82); backdrop-filter: blur(18px); }
+    .dark .glass { background: rgba(15,23,42,.82); }
+    .soft-shadow { box-shadow: 0 18px 50px rgba(15,23,42,.12); }
+    .slide-up { animation: slideUp .28s ease-out; }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .skeleton { background: linear-gradient(90deg,#e5e7eb,#f8fafc,#e5e7eb); background-size: 200% 100%; animation: shimmer 1.2s infinite; }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useEffect, useMemo, useRef, useState } = React;
+    if (window.pdfjsLib) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    }
+
+    const DB_NAME = "ExpenseTrackerProDB";
+    const DB_VERSION = 2;
+    const CATEGORIES = ["Food","Fruits","Vegetables","Groceries","Stationery","Shopping","Fuel","Medical","Utilities","Travel","Rent","Salary","Savings","Entertainment","Education","Subscriptions","Transfer","Cash","Other"];
+    const CATEGORY_RULES_DEFAULT = {
+      Food: ["swiggy","zomato","restaurant","cafe","coffee","dominos","pizza","mcdonald","kfc","eatclub","food"],
+      Fruits: ["fruit","fruits","banana","apple","mango","orange","grapes","fresh fruit"],
+      Vegetables: ["vegetable","vegetables","sabzi","greens","tomato","potato","onion"],
+      Groceries: ["milk","dmart","bigbasket","blinkit","zepto","reliance fresh","grocery","mart","supermarket"],
+      Stationery: ["stationery","stationary","book","notebook","pen","pencil","printout","xerox"],
+      Shopping: ["amazon","amzn","flipkart","myntra","ajio","meesho","nykaa"],
+      Fuel: ["petrol","fuel","indian oil","iocl","bharat petroleum","bpcl","hpcl","shell"],
+      Medical: ["pharmacy","medical","apollo","netmeds","pharmeasy","hospital","clinic"],
+      Utilities: ["electricity","bescom","water","broadband","airtel","jio","vi ","bsnl","gas","utility"],
+      Travel: ["uber","ola","rapido","irctc","metro","parking","fastag"],
+      Entertainment: ["netflix","prime video","spotify","hotstar","bookmyshow","youtube"],
+      Subscriptions: ["subscription","renewal","apple.com/bill","google storage","microsoft"],
+      Rent: ["rent","landlord"],
+      Salary: ["salary","payroll"],
+      Savings: ["mutual fund","sip","zerodha","groww","investment"]
+    };
+    const MERCHANT_ALIASES = [
+      [/amazon|amzn/i, "Amazon"], [/swiggy/i, "Swiggy"], [/zomato/i, "Zomato"], [/uber/i, "Uber"], [/ola/i, "Ola"],
+      [/reliance\s*fresh|ril/i, "Reliance Fresh"], [/indian\s*oil|iocl/i, "Indian Oil"], [/flipkart/i, "Flipkart"],
+      [/blinkit/i, "Blinkit"], [/zepto/i, "Zepto"], [/myntra/i, "Myntra"], [/airtel/i, "Airtel"],
+      [/jio/i, "Jio"], [/netflix/i, "Netflix"], [/spotify/i, "Spotify"], [/apollo/i, "Apollo"]
+    ];
+
+    const icons = {
+      Home: "M3 10.5 12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-7H8v7H4a1 1 0 0 1-1-1z",
+      Plus: "M12 5v14M5 12h14",
+      Upload: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12",
+      Download: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3",
+      Chart: "M4 19V9M12 19V5M20 19v-8M3 19h18",
+      Clock: "M12 8v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0",
+      Settings: "M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5ZM19.4 15a1.8 1.8 0 0 0 .36 1.98l.04.04a2.2 2.2 0 1 1-3.1 3.1l-.04-.04a1.8 1.8 0 0 0-1.98-.36 1.8 1.8 0 0 0-1.08 1.65V21a2.2 2.2 0 0 1-4.4 0v-.06a1.8 1.8 0 0 0-1.08-1.65 1.8 1.8 0 0 0-1.98.36l-.04.04a2.2 2.2 0 1 1-3.1-3.1l.04-.04A1.8 1.8 0 0 0 4.6 15a1.8 1.8 0 0 0-1.65-1.08H3a2.2 2.2 0 0 1 0-4.4h.06A1.8 1.8 0 0 0 4.7 8.44a1.8 1.8 0 0 0-.36-1.98L4.3 6.42a2.2 2.2 0 1 1 3.1-3.1l.04.04a1.8 1.8 0 0 0 1.98.36H9.5A1.8 1.8 0 0 0 10.58 2.1V2a2.2 2.2 0 0 1 4.4 0v.06a1.8 1.8 0 0 0 1.08 1.65 1.8 1.8 0 0 0 1.98-.36l.04-.04a2.2 2.2 0 1 1 3.1 3.1l-.04.04a1.8 1.8 0 0 0-.36 1.98v.08a1.8 1.8 0 0 0 1.65 1.08H21a2.2 2.2 0 0 1 0 4.4h-.06A1.8 1.8 0 0 0 19.4 15Z",
+      Search: "M21 21l-4.4-4.4M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4Z",
+      Trash: "M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 11v6M14 11v6",
+      Moon: "M21 12.8A8.5 8.5 0 1 1 11.2 3 6.7 6.7 0 0 0 21 12.8Z",
+      Wifi: "M5 13a10 10 0 0 1 14 0M8.5 16.5a5 5 0 0 1 7 0M12 20h.01",
+      File: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6",
+      Refresh: "M21 12a9 9 0 0 1-15.5 6.2M3 12A9 9 0 0 1 18.5 5.8M3 4v6h6M21 20v-6h-6",
+      X: "M18 6 6 18M6 6l12 12"
+    };
+    function Icon({ name, size = 22, className = "" }) {
+      return <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d={icons[name]} /></svg>;
+    }
+
+    const uid = () => `${Date.now().toString(36)}-${crypto.getRandomValues(new Uint32Array(1))[0].toString(36)}`;
+    const money = n => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(Number(n || 0));
+    const clean = v => String(v ?? "").replace(/[<>"'`]/g, "").replace(/\s+/g, " ").trim();
+    const parseAmount = v => {
+      const raw = String(v ?? "");
+      const hasCurrency = /₹|rs\.?|inr/i.test(raw);
+      const text = raw.replace(/[₹,\s]/g, "").replace(/[()]/g, "-");
+      const matches = [...text.matchAll(/-?\d+(\.\d+)?/g)].map(m => Number(m[0])).filter(Number.isFinite);
+      const candidates = hasCurrency ? matches : matches.filter(n => Math.abs(n) < 100000 && !/^20\d{4,}$/.test(String(Math.abs(n))));
+      const num = candidates[candidates.length - 1] || 0;
+      return Math.abs(num);
+    };
+    const toISODate = value => {
+      const raw = String(value ?? "").trim();
+      if (!raw) return new Date().toISOString().slice(0,10);
+      const normalized = raw.replace(/\./g, "/").replace(/-/g, "/");
+      const dm = normalized.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+      if (dm) {
+        const d = dm[1].padStart(2,"0"), m = dm[2].padStart(2,"0"), y = dm[3].length === 2 ? `20${dm[3]}` : dm[3];
+        return `${y}-${m}-${d}`;
+      }
+      const parsed = new Date(raw);
+      return Number.isNaN(parsed.getTime()) ? new Date().toISOString().slice(0,10) : parsed.toISOString().slice(0,10);
+    };
+    async function sha256(text) {
+      const data = new TextEncoder().encode(text);
+      const hash = await crypto.subtle.digest("SHA-256", data);
+      return [...new Uint8Array(hash)].map(b => b.toString(16).padStart(2,"0")).join("");
+    }
+    const normalizeMerchant = value => {
+      let s = clean(value).replace(/UPI\/|PAYMENT TO|PAID TO|TRANSFER TO|P2M|P2P|LIMITED|PVT|LTD|INDIA/gi, " ").replace(/[^a-z0-9 @._-]/gi, " ").replace(/\s+/g, " ").trim();
+      for (const [rx, name] of MERCHANT_ALIASES) if (rx.test(s)) return name;
+      const upiName = s.match(/([a-z0-9._-]+)@/i)?.[1];
+      if (upiName) s = upiName;
+      return s ? s.split(" ").slice(0, 3).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(" ") : "Unknown Merchant";
+    };
+    const inferCategory = (merchant, note, type, rules) => {
+      if (type === "Income") return "Salary";
+      const hay = `${merchant} ${note}`.toLowerCase();
+      for (const [category, terms] of Object.entries(rules || CATEGORY_RULES_DEFAULT)) {
+        if (terms.some(term => hay.includes(term.toLowerCase()))) return category;
+      }
+      return "Other";
+    };
+    const similarity = (a, b) => {
+      a = String(a).toLowerCase(); b = String(b).toLowerCase();
+      if (a === b) return 1;
+      const A = new Set(a.split(/\s+/).filter(Boolean)), B = new Set(b.split(/\s+/).filter(Boolean));
+      const inter = [...A].filter(x => B.has(x)).length;
+      return inter / Math.max(1, Math.max(A.size, B.size));
+    };
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, DB_VERSION);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains("transactions")) {
+            const s = db.createObjectStore("transactions", { keyPath: "id" });
+            s.createIndex("fingerprint", "fingerprint", { unique: true });
+            s.createIndex("syncStatus", "syncStatus");
+            s.createIndex("date", "date");
+            s.createIndex("statementFile", "statementFile");
+          }
+          if (!db.objectStoreNames.contains("statements")) {
+            const s = db.createObjectStore("statements", { keyPath: "fileHash" });
+            s.createIndex("uploadDate", "uploadDate");
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+    const txStore = (db, name, mode = "readonly") => db.transaction(name, mode).objectStore(name);
+    const promisify = req => new Promise((resolve, reject) => { req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error); });
+    async function getAll(db, store) { return promisify(txStore(db, store).getAll()); }
+    async function putItem(db, store, item) { return promisify(txStore(db, store, "readwrite").put(item)); }
+    async function deleteItem(db, store, key) { return promisify(txStore(db, store, "readwrite").delete(key)); }
+    async function clearStore(db, store) { return promisify(txStore(db, store, "readwrite").clear()); }
+    async function getByKey(db, store, key) { return promisify(txStore(db, store).get(key)); }
+    async function getByIndex(db, store, idx, value) { return promisify(txStore(db, store).index(idx).get(value)); }
+
+    async function migrateLegacy(db) {
+      if (localStorage.getItem("expenseDataMigrated") === "yes") return;
+      const raw = localStorage.getItem("expenseData");
+      if (!raw) { localStorage.setItem("expenseDataMigrated", "yes"); return; }
+      try {
+        const existing = await getAll(db, "transactions");
+        if (existing.length) return;
+        const rows = JSON.parse(raw);
+        for (const row of rows) {
+          const merchant = normalizeMerchant(row.category || row.merchant || "Manual");
+          const type = row.type || "Expense";
+          const normalizedMerchant = normalizeMerchant(merchant);
+          const fingerprint = await sha256([row.date, row.amount, normalizedMerchant, row.category, "legacy"].join("|").toLowerCase());
+          await putItem(db, "transactions", {
+            id: row.id || uid(), fingerprint, date: toISODate(row.date), amount: Number(row.amount || 0), type,
+            category: row.category || inferCategory(merchant, "", type, CATEGORY_RULES_DEFAULT), merchant, normalizedMerchant,
+            source: "Manual", upiRef: "", notes: row.notes || "", imported: false, statementFile: "", syncStatus: "pending", createdAt: row.createdAt || new Date().toISOString()
+          });
+        }
+        localStorage.setItem("expenseDataMigrated", "yes");
+      } catch (err) { console.warn("Legacy migration skipped", err); }
+    }
+    async function enforceImportedTagGate(db) {
+      if (localStorage.getItem("importTagGateApplied") === "yes") return;
+      const rows = await getAll(db, "transactions");
+      for (const row of rows) {
+        if (row.imported && !row.tagStatus && row.syncStatus !== "synced") {
+          await putItem(db, "transactions", { ...row, suggestedCategory: row.category || "Other", tagStatus: "needs_tag", syncStatus: "needs_tag" });
+        }
+      }
+      localStorage.setItem("importTagGateApplied", "yes");
+    }
+
+    function parseGooglePayText(text) {
+      const lines = text.split(/\r?\n/).map(clean).filter(Boolean);
+      const rows = [];
+      for (let i = 0; i < lines.length; i++) {
+        if (!/^\d{1,2}\s+[A-Za-z]{3},\s+\d{4}$/.test(lines[i])) continue;
+        const date = lines[i];
+        const time = /^\d{1,2}:\d{2}\s*(AM|PM)$/i.test(lines[i + 1] || "") ? lines[++i] : "";
+        const details = [];
+        let amount = "";
+        let upiRef = "";
+        for (let j = i + 1; j < Math.min(lines.length, i + 12); j++) {
+          const line = lines[j];
+          if (/^\d{1,2}\s+[A-Za-z]{3},\s+\d{4}$/.test(line)) break;
+          if (/^₹\s*[\d,]+(\.\d+)?$/.test(line)) { amount = line; i = j; break; }
+          const ref = line.match(/UPI Transaction ID:\s*([A-Za-z0-9-]+)/i);
+          if (ref) upiRef = ref[1];
+          details.push(line);
+        }
+        if (amount && details.length) {
+          const mainDetail = details.find(line => /^(Paid to|Received from|Top-up to|Refund from)/i.test(line)) || details[0];
+          rows.push({ date, time, description: mainDetail, details: details.join(" "), amount, "upi reference": upiRef });
+        }
+      }
+      return rows;
+    }
+    function parseDelimitedText(text, fileName) {
+      if (/Transaction statement period/i.test(text) && /UPI Transaction ID/i.test(text)) return parseGooglePayText(text);
+      const parsed = Papa.parse(text, { header: true, skipEmptyLines: true, transformHeader: h => clean(h).toLowerCase() });
+      if (parsed.data.length && Object.keys(parsed.data[0]).length > 1) return parsed.data;
+      const lines = text.split(/\r?\n/).map(clean).filter(Boolean);
+      return lines.map(line => {
+        const parts = line.split(/\s{2,}|\t|,/).map(clean).filter(Boolean);
+        return { date: parts[0], description: parts.slice(1, -1).join(" "), amount: parts[parts.length - 1], fileName };
+      });
+    }
+    async function extractPdfText(file) {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+      let text = "";
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        text += content.items.map(item => `${item.str}${item.hasEOL ? "\n" : " "}`).join("") + "\n";
+      }
+      return text;
+    }
+    function getField(row, names) {
+      const keys = Object.keys(row);
+      for (const name of names) {
+        const found = keys.find(k => k.toLowerCase().includes(name));
+        if (found && row[found] !== undefined && row[found] !== "") return row[found];
+      }
+      return "";
+    }
+    async function normalizeImportedRow(row, fileName, fileHash, rules) {
+      const rawDate = getField(row, ["date", "time", "posted"]);
+      const rawAmount = getField(row, ["amount", "debit", "credit", "withdrawal", "deposit", "paid"]);
+      const description = clean(getField(row, ["merchant", "description", "narration", "details", "particular", "transaction", "payee", "remarks"]) || Object.values(row).join(" "));
+      const upiRef = clean(getField(row, ["upi", "utr", "rrn", "reference", "ref", "txn id", "transaction id"]));
+      const debit = getField(row, ["debit", "withdrawal", "paid"]);
+      const credit = getField(row, ["credit", "deposit", "received"]);
+      if (/^top-?up to upi lite/i.test(description)) return null;
+      const amountSource = rawAmount || debit || credit;
+      const amount = parseAmount(amountSource);
+      if (!amount || !description) return null;
+      if (amount > 100000 && !/₹|rs\.?|inr/i.test(String(amountSource))) return null;
+      const type = credit && !debit ? "Income" : /received|credited|refund|salary/i.test(description) ? "Income" : "Expense";
+      const date = toISODate(rawDate || description);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+      const merchant = normalizeMerchant(description);
+      const normalizedMerchant = normalizeMerchant(merchant);
+      const category = inferCategory(normalizedMerchant, description, type, rules);
+      const fingerprint = await sha256([date, amount.toFixed(2), normalizedMerchant, upiRef, type].join("|").toLowerCase());
+      return {
+        id: uid(), fingerprint, date, amount, type, category, merchant, normalizedMerchant, source: "Statement", upiRef,
+        notes: description, imported: true, statementFile: fileName, statementHash: fileHash, suggestedCategory: category,
+        tagStatus: "needs_tag", syncStatus: "needs_tag", createdAt: new Date().toISOString()
+      };
+    }
+    async function detectDuplicate(db, tx, existing) {
+      if (await getByIndex(db, "transactions", "fingerprint", tx.fingerprint)) return "fingerprint";
+      if (tx.upiRef) {
+        const exactRef = existing.find(e => e.upiRef && e.upiRef === tx.upiRef);
+        if (exactRef) return "upiRef";
+      }
+      const fuzzy = existing.find(e => e.date === tx.date && e.type === tx.type && Math.abs(Number(e.amount) - tx.amount) < 0.01 && similarity(e.normalizedMerchant, tx.normalizedMerchant) >= .65);
+      return fuzzy ? "fuzzy" : "";
+    }
+
+    function App() {
+      const [db, setDb] = useState(null);
+      const [ready, setReady] = useState(false);
+      const [tab, setTab] = useState("dashboard");
+      const [transactions, setTransactions] = useState([]);
+      const [statements, setStatements] = useState([]);
+      const [query, setQuery] = useState("");
+      const [month, setMonth] = useState(new Date().toISOString().slice(0,7));
+      const [categoryFilter, setCategoryFilter] = useState("All");
+      const [sourceFilter, setSourceFilter] = useState("All");
+      const [sheetUrl, setSheetUrl] = useState(localStorage.getItem("sheetUrl") || "");
+      const [lastSync, setLastSync] = useState(localStorage.getItem("lastSync") || "");
+      const [online, setOnline] = useState(navigator.onLine);
+      const [syncing, setSyncing] = useState(false);
+      const [dark, setDark] = useState(localStorage.getItem("darkMode") === "yes");
+      const [showForm, setShowForm] = useState(false);
+      const [form, setForm] = useState({ date: new Date().toISOString().slice(0,10), merchant: "", category: "Food", type: "Expense", amount: "", notes: "" });
+      const [uploadState, setUploadState] = useState({ active: false, file: "", progress: 0, message: "" });
+      const [toast, setToast] = useState("");
+      const [rulesText, setRulesText] = useState(localStorage.getItem("categoryRules") || JSON.stringify(CATEGORY_RULES_DEFAULT, null, 2));
+      const chartRef = useRef(null);
+      const chartObj = useRef(null);
+      const inputRef = useRef(null);
+      const rules = useMemo(() => { try { return JSON.parse(rulesText); } catch { return CATEGORY_RULES_DEFAULT; } }, [rulesText]);
+
+      const refresh = async (database = db) => {
+        if (!database) return;
+        const [txs, stmts] = await Promise.all([getAll(database, "transactions"), getAll(database, "statements")]);
+        setTransactions(txs.sort((a,b) => String(b.date).localeCompare(String(a.date)) || String(b.createdAt).localeCompare(String(a.createdAt))));
+        setStatements(stmts.sort((a,b) => String(b.uploadDate).localeCompare(String(a.uploadDate))));
+      };
+      useEffect(() => {
+        (async () => {
+          const database = await openDB();
+          setDb(database);
+          await migrateLegacy(database);
+          await enforceImportedTagGate(database);
+          await refresh(database);
+          setReady(true);
+        })();
+        const on = () => setOnline(true), off = () => setOnline(false);
+        addEventListener("online", on); addEventListener("offline", off);
+        return () => { removeEventListener("online", on); removeEventListener("offline", off); };
+      }, []);
+      useEffect(() => { document.documentElement.classList.toggle("dark", dark); localStorage.setItem("darkMode", dark ? "yes" : "no"); }, [dark]);
+      useEffect(() => { if (online && sheetUrl && db) syncPending(); }, [online, sheetUrl, db, transactions.length]);
+      useEffect(() => {
+        if (tab !== "reports" || !chartRef.current) return;
+        const data = filteredByMonth(month).filter(t => t.type === "Expense").reduce((acc,t) => { acc[t.category] = (acc[t.category] || 0) + Number(t.amount); return acc; }, {});
+        if (chartObj.current) chartObj.current.destroy();
+        chartObj.current = new Chart(chartRef.current.getContext("2d"), {
+          type: "doughnut",
+          data: { labels: Object.keys(data), datasets: [{ data: Object.values(data), backgroundColor: ["#0f766e","#2563eb","#db2777","#f59e0b","#16a34a","#7c3aed","#dc2626","#0891b2","#64748b"] }] },
+          options: { plugins: { legend: { position: "bottom" } }, cutout: "62%" }
+        });
+      }, [tab, transactions, month]);
+
+      const notify = msg => { setToast(msg); setTimeout(() => setToast(""), 3500); };
+      const saveSettings = () => {
+        if (sheetUrl.trim()) localStorage.setItem("sheetUrl", sheetUrl.trim()); else localStorage.removeItem("sheetUrl");
+        try { JSON.parse(rulesText); localStorage.setItem("categoryRules", rulesText); notify("Settings saved"); } catch { notify("Category rules must be valid JSON"); }
+      };
+      const filteredByMonth = m => transactions.filter(t => !m || t.date?.slice(0,7) === m);
+      const viewTransactions = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        return transactions.filter(t => {
+          const matchesQ = !q || [t.merchant,t.category,t.notes,t.upiRef,t.source].join(" ").toLowerCase().includes(q);
+          const matchesMonth = !month || t.date?.slice(0,7) === month;
+          const matchesCat = categoryFilter === "All" || t.category === categoryFilter;
+          const matchesSource = sourceFilter === "All" || (sourceFilter === "Imported" ? t.imported : !t.imported);
+          return matchesQ && matchesMonth && matchesCat && matchesSource;
+        });
+      }, [transactions, query, month, categoryFilter, sourceFilter]);
+      const tagQueue = useMemo(() => transactions.filter(t => t.imported && t.tagStatus !== "tagged" && t.syncStatus !== "synced"), [transactions]);
+      const totals = useMemo(() => {
+        const current = filteredByMonth(month);
+        const expenses = current.filter(t => t.type === "Expense").reduce((s,t)=>s+Number(t.amount),0);
+        const income = current.filter(t => t.type === "Income").reduce((s,t)=>s+Number(t.amount),0);
+        const savings = current.filter(t => t.type === "Savings").reduce((s,t)=>s+Number(t.amount),0);
+        const needsTag = transactions.filter(t => t.imported && t.tagStatus !== "tagged" && t.syncStatus !== "synced").length;
+        const pending = transactions.filter(t => t.syncStatus !== "synced" && t.syncStatus !== "needs_tag").length;
+        const imported = current.filter(t => t.imported).length;
+        return { expenses, income, savings, balance: income - expenses - savings, pending, needsTag, imported, currentCount: current.length };
+      }, [transactions, month]);
+
+      async function syncOne(transaction) {
+        const url = localStorage.getItem("sheetUrl");
+        if (!url || !navigator.onLine) return false;
+        const row = {
+          fingerprint: transaction.fingerprint,
+          Date: transaction.date, Merchant: transaction.merchant, Category: transaction.category, Type: transaction.type,
+          Amount: transaction.amount, Source: transaction.source, "UPI Ref": transaction.upiRef, "Imported From": transaction.statementFile, Notes: transaction.notes
+        };
+        const res = await fetch(url, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(row) });
+        return true;
+      }
+      async function syncPending() {
+        if (!db || !localStorage.getItem("sheetUrl") || syncing || !navigator.onLine) return;
+        setSyncing(true);
+        const all = await getAll(db, "transactions");
+        const syncable = all.filter(t => (t.syncStatus === "pending" || t.syncStatus === "failed") && (!t.imported || t.tagStatus === "tagged"));
+        for (const tx of syncable.slice(0, 100)) {
+          try { await syncOne(tx); await putItem(db, "transactions", { ...tx, syncStatus: "synced", syncedAt: new Date().toISOString() }); }
+          catch { await putItem(db, "transactions", { ...tx, syncStatus: "failed", lastSyncError: new Date().toISOString() }); }
+        }
+        const now = new Date().toISOString();
+        localStorage.setItem("lastSync", now); setLastSync(now); setSyncing(false); await refresh();
+      }
+      async function addManual() {
+        if (!form.amount || !form.merchant) return notify("Merchant and amount are required");
+        const normalizedMerchant = normalizeMerchant(form.merchant);
+        const fingerprint = await sha256([form.date, Number(form.amount).toFixed(2), normalizedMerchant, form.type, form.notes].join("|").toLowerCase());
+        const existing = await getAll(db, "transactions");
+        const tx = { id: uid(), fingerprint, date: form.date, amount: Number(form.amount), type: form.type, category: form.category, merchant: clean(form.merchant), normalizedMerchant, source: "Manual", upiRef: "", notes: clean(form.notes), imported: false, statementFile: "", syncStatus: "pending", createdAt: new Date().toISOString() };
+        const dup = await detectDuplicate(db, tx, existing);
+        if (dup && !confirm("This looks like a duplicate. Add it anyway?")) return;
+        await putItem(db, "transactions", tx);
+        setShowForm(false); setForm({ date: new Date().toISOString().slice(0,10), merchant: "", category: "Food", type: "Expense", amount: "", notes: "" });
+        await refresh(); syncPending(); notify("Transaction added");
+      }
+      async function removeTransaction(id) {
+        if (!confirm("Delete this transaction from local storage?")) return;
+        await deleteItem(db, "transactions", id); await refresh(); notify("Transaction deleted");
+      }
+      async function processFiles(files, force = false) {
+        if (!db || !files.length) return;
+        for (const file of files) {
+          try {
+            setUploadState({ active: true, file: file.name, progress: 8, message: "Reading file locally" });
+            const bytes = await file.arrayBuffer();
+            const fileHash = await sha256(`${file.name}|${file.size}|${file.lastModified}|${Array.from(new Uint8Array(bytes.slice(0, 4096))).join(",")}`);
+            const previous = await getByKey(db, "statements", fileHash);
+            if (previous && !force) { notify("This statement was already imported earlier. Use Force reprocess if needed."); continue; }
+            let text = "";
+            if (/pdf$/i.test(file.name)) {
+              setUploadState({ active: true, file: file.name, progress: 22, message: "Extracting PDF text" });
+              text = await extractPdfText(new File([bytes], file.name, { type: file.type }));
+            } else {
+              text = new TextDecoder().decode(bytes);
+            }
+            setUploadState({ active: true, file: file.name, progress: 42, message: "Parsing transactions" });
+            const rows = parseDelimitedText(text, file.name);
+            const existing = await getAll(db, "transactions");
+            let importedCount = 0, duplicateCount = 0, failedCount = 0;
+            for (let i = 0; i < rows.length; i++) {
+              const normalized = await normalizeImportedRow(rows[i], file.name, fileHash, rules);
+              if (!normalized) { failedCount++; continue; }
+              const dup = await detectDuplicate(db, normalized, existing);
+              if (dup) { duplicateCount++; continue; }
+              await putItem(db, "transactions", normalized);
+              existing.push(normalized);
+              importedCount++;
+              if (i % 15 === 0) setUploadState({ active: true, file: file.name, progress: 45 + Math.round((i / rows.length) * 45), message: "Checking duplicates" });
+            }
+            await putItem(db, "statements", { fileName: file.name, fileHash, fileSize: file.size, uploadDate: new Date().toISOString(), importedCount, duplicateCount, failedCount, lastProcessed: new Date().toISOString(), status: "processed" });
+            notify(`${importedCount} new transactions imported, ${duplicateCount} duplicates skipped`);
+          } catch (err) {
+            console.error(err);
+            notify(`Could not import ${file.name}. The file may be malformed.`);
+          }
+        }
+        setUploadState({ active: false, file: "", progress: 0, message: "" });
+        await refresh();
+        notify("Statement imported. Review and tag transactions before Google Sheets sync.");
+      }
+      async function tagTransaction(transaction, category, applyToMerchant = false) {
+        if (!category) return;
+        const targets = applyToMerchant
+          ? transactions.filter(t => t.imported && t.tagStatus !== "tagged" && t.normalizedMerchant === transaction.normalizedMerchant)
+          : [transaction];
+        for (const tx of targets) {
+          await putItem(db, "transactions", { ...tx, category, tagStatus: "tagged", taggedAt: new Date().toISOString(), syncStatus: "pending" });
+        }
+        await refresh();
+        notify(applyToMerchant ? `Tagged ${targets.length} ${transaction.normalizedMerchant} transactions` : "Transaction tagged and queued for sync");
+        syncPending();
+      }
+      async function reimport(statement) {
+        notify("Pick the same file to force reprocess it");
+        inputRef.current.dataset.force = "yes";
+        inputRef.current.click();
+      }
+      async function deleteStatementData(statement) {
+        if (!confirm("Delete transactions imported from this statement? Manual entries stay untouched.")) return;
+        for (const tx of transactions.filter(t => t.statementHash === statement.fileHash)) await deleteItem(db, "transactions", tx.id);
+        await deleteItem(db, "statements", statement.fileHash);
+        await refresh(); notify("Statement data removed");
+      }
+      function exportCSV() {
+        const headers = ["Date","Merchant","Category","Suggested Category","Tag Status","Type","Amount","Source","UPI Ref","Imported From","Notes","Fingerprint","Sync Status"];
+        const rows = transactions.map(t => [t.date,t.merchant,t.category,t.suggestedCategory,t.tagStatus,t.type,t.amount,t.source,t.upiRef,t.statementFile,t.notes,t.fingerprint,t.syncStatus].map(v => `"${String(v ?? "").replace(/"/g,'""')}"`).join(","));
+        const blob = new Blob([[headers.join(","), ...rows].join("\n")], { type: "text/csv" });
+        const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `expense-tracker-${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(url);
+      }
+      function backupJSON() {
+        const blob = new Blob([JSON.stringify({ transactions, statements, exportedAt: new Date().toISOString() }, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = "expense-tracker-backup.json"; a.click(); URL.revokeObjectURL(url);
+      }
+      async function restoreJSON(file) {
+        const data = JSON.parse(await file.text());
+        for (const tx of data.transactions || []) await putItem(db, "transactions", tx);
+        for (const st of data.statements || []) await putItem(db, "statements", st);
+        await refresh(); notify("Backup restored");
+      }
+
+      const Card = ({ children, className = "" }) => <div className={`rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 soft-shadow ${className}`}>{children}</div>;
+      const Button = ({ children, className = "", ...props }) => <button {...props} className={`rounded-xl px-4 py-3 font-semibold transition active:scale-[.98] disabled:opacity-50 ${className}`}>{children}</button>;
+      const Stat = ({ label, value, tone }) => <Card className="p-4"><p className="text-xs uppercase tracking-wide text-slate-500">{label}</p><p className={`mt-2 text-2xl font-black ${tone || "text-slate-950 dark:text-white"}`}>{value}</p></Card>;
+      const TxRow = ({ t }) => {
+        const needsTag = t.imported && t.tagStatus !== "tagged" && t.syncStatus !== "synced";
+        const suggested = t.suggestedCategory || t.category || "Other";
+        return <div className="py-3 border-b border-slate-100 dark:border-slate-800 last:border-0">
+          <div className="flex items-center gap-3">
+            <div className={`h-11 w-11 rounded-2xl grid place-items-center text-white font-black ${t.type === "Income" ? "bg-emerald-600" : needsTag ? "bg-amber-600" : t.imported ? "bg-blue-600" : "bg-slate-700"}`}>{t.merchant?.[0] || "?"}</div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2"><p className="font-bold truncate text-slate-900 dark:text-white">{t.merchant}</p><span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500">{t.imported ? "Statement" : "Manual"}</span>{needsTag && <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Needs tag</span>}</div>
+              <p className="text-xs text-slate-500 truncate">{t.date} • {t.category} • {t.syncStatus}</p>
+            </div>
+            <div className="text-right">
+              <p className={`font-black ${t.type === "Income" ? "text-emerald-600" : "text-slate-900 dark:text-white"}`}>{t.type === "Income" ? "+" : "-"}{money(t.amount)}</p>
+              <button onClick={() => removeTransaction(t.id)} className="text-xs text-rose-500">Delete</button>
+            </div>
+          </div>
+          {needsTag && <div className="mt-3 ml-14 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 p-3">
+            <p className="text-xs text-amber-800 dark:text-amber-200 mb-2">Suggested tag: <b>{suggested}</b>. This row will not sync to Google Sheets until tagged.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <Button onClick={() => tagTransaction(t, suggested)} className="bg-amber-600 text-white py-2 text-sm">Confirm {suggested}</Button>
+              <select defaultValue="" onChange={e => e.target.value && tagTransaction(t, e.target.value)} className="rounded-xl border border-amber-200 dark:border-amber-900 bg-white dark:bg-slate-950 p-2 text-sm text-slate-900 dark:text-white">
+                <option value="">Choose tag...</option>{CATEGORIES.map(c => <option key={c}>{c}</option>)}
+              </select>
+              <Button onClick={() => tagTransaction(t, suggested, true)} className="bg-white dark:bg-slate-900 text-amber-700 dark:text-amber-200 border border-amber-200 dark:border-amber-900 py-2 text-sm">Apply to merchant</Button>
+            </div>
+          </div>}
+        </div>;
+      };
+
+      const Dashboard = () => <div className="space-y-5 slide-up">
+        <div className="grid grid-cols-2 gap-3">
+          <Stat label="Spent this month" value={money(totals.expenses)} tone="text-rose-600" />
+          <Stat label="Balance" value={money(totals.balance)} tone={totals.balance >= 0 ? "text-emerald-600" : "text-rose-600"} />
+          <Stat label="Needs tagging" value={totals.needsTag} tone="text-amber-600" />
+          <Stat label="Pending sync" value={totals.pending} tone="text-amber-600" />
+        </div>
+        <Card className="p-4">
+          <div className="flex items-center justify-between mb-3"><h2 className="font-black text-slate-950 dark:text-white">Recent Activity</h2><button onClick={() => setTab("history")} className="text-sm font-bold text-blue-600">View all</button></div>
+          {transactions.slice(0,8).map(t => <TxRow key={t.id} t={t} />)}
+          {!transactions.length && <Empty text="Add a cash expense or import a statement to begin." />}
+        </Card>
+      </div>;
+
+      const History = () => <div className="space-y-4 slide-up">
+        <Filters />
+        <Card className="p-4">
+          <div className="flex items-center justify-between mb-2"><h2 className="font-black text-slate-950 dark:text-white">{viewTransactions.length} transactions</h2><Button onClick={exportCSV} className="bg-slate-900 text-white dark:bg-white dark:text-slate-900 py-2 px-3 text-sm"><Icon name="Download" size={16} /></Button></div>
+          <div className="max-h-[62vh] overflow-y-auto hide-scrollbar">{viewTransactions.map(t => <TxRow key={t.id} t={t} />)}</div>
+          {!viewTransactions.length && <Empty text="No transactions match these filters." />}
+        </Card>
+      </div>;
+      const Filters = () => <div className="space-y-3">
+        <div className="relative"><Icon name="Search" size={18} className="absolute left-3 top-3.5 text-slate-400" /><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search merchant, UPI ref, notes" className="w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 pl-10 pr-4 py-3 outline-none text-slate-900 dark:text-white" /></div>
+        <div className="grid grid-cols-3 gap-2">
+          <input type="month" value={month} onChange={e=>setMonth(e.target.value)} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 text-sm text-slate-900 dark:text-white" />
+          <select value={categoryFilter} onChange={e=>setCategoryFilter(e.target.value)} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 text-sm text-slate-900 dark:text-white"><option>All</option>{CATEGORIES.map(c=><option key={c}>{c}</option>)}</select>
+          <select value={sourceFilter} onChange={e=>setSourceFilter(e.target.value)} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-3 text-sm text-slate-900 dark:text-white"><option>All</option><option>Imported</option><option>Manual</option></select>
+        </div>
+      </div>;
+
+      const Statements = () => <div className="space-y-4 slide-up">
+        <div onDrop={e => { e.preventDefault(); processFiles([...e.dataTransfer.files]); }} onDragOver={e => e.preventDefault()} onClick={() => inputRef.current.click()} className="rounded-3xl border-2 border-dashed border-blue-300 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30 p-7 text-center cursor-pointer">
+          <Icon name="Upload" size={36} className="mx-auto text-blue-600" />
+          <h2 className="mt-3 text-xl font-black text-slate-950 dark:text-white">Upload Statements</h2>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">CSV, TXT, Google Pay, BHIM, UPI exports, and text-readable PDFs are parsed locally on this device.</p>
+          <input ref={inputRef} type="file" multiple accept=".csv,.txt,.pdf" className="hidden" onChange={e => { const force = e.target.dataset.force === "yes"; e.target.dataset.force = ""; processFiles([...e.target.files], force); e.target.value = ""; }} />
+        </div>
+        {uploadState.active && <Card className="p-4"><div className="flex justify-between text-sm font-bold text-slate-700 dark:text-slate-200"><span>{uploadState.file}</span><span>{uploadState.progress}%</span></div><div className="h-3 mt-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden"><div className="h-full bg-blue-600 rounded-full" style={{width:`${uploadState.progress}%`}} /></div><p className="text-xs text-slate-500 mt-2">{uploadState.message}</p></Card>}
+        <Card className="p-4">
+          <div className="flex items-center justify-between mb-3"><h2 className="font-black text-slate-950 dark:text-white">Tag Before Sync</h2><span className="text-xs font-bold px-2 py-1 rounded-full bg-amber-100 text-amber-700">{tagQueue.length} waiting</span></div>
+          <p className="text-sm text-slate-600 dark:text-slate-300 mb-2">Imported statement rows are held locally until you confirm a useful tag. Tagged rows are then queued for Google Sheets.</p>
+          <div className="max-h-[42vh] overflow-y-auto hide-scrollbar">{tagQueue.slice(0, 25).map(t => <TxRow key={t.id} t={t} />)}</div>
+          {!tagQueue.length && <Empty text="No imported transactions are waiting for tags." />}
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center justify-between mb-3"><h2 className="font-black text-slate-950 dark:text-white">Import History</h2><Button onClick={() => inputRef.current.click()} className="bg-blue-600 text-white py-2 px-3 text-sm">Add</Button></div>
+          {statements.map(s => <div key={s.fileHash} className="py-3 border-b border-slate-100 dark:border-slate-800 last:border-0">
+            <div className="flex gap-3">
+              <div className="h-10 w-10 rounded-xl bg-slate-100 dark:bg-slate-800 grid place-items-center text-slate-600 dark:text-slate-300"><Icon name="File" size={20} /></div>
+              <div className="min-w-0 flex-1"><p className="font-bold truncate text-slate-900 dark:text-white">{s.fileName}</p><p className="text-xs text-slate-500">{new Date(s.uploadDate).toLocaleString("en-IN")} • {s.importedCount} imported • {s.duplicateCount} skipped • {s.failedCount} failed</p></div>
+            </div>
+            <div className="mt-3 flex gap-2"><Button onClick={() => { setQuery(s.fileName); setSourceFilter("Imported"); setTab("history"); }} className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 py-2 text-sm">View</Button><Button onClick={() => reimport(s)} className="bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 py-2 text-sm">Force reprocess</Button><Button onClick={() => deleteStatementData(s)} className="bg-rose-50 dark:bg-rose-950 text-rose-700 dark:text-rose-300 py-2 text-sm">Delete data</Button></div>
+          </div>)}
+          {!statements.length && <Empty text="Uploaded statement files will appear here." />}
+        </Card>
+      </div>;
+
+      const Reports = () => {
+        const monthTx = filteredByMonth(month);
+        const byMerchant = Object.entries(monthTx.filter(t=>t.type==="Expense").reduce((a,t)=>{a[t.normalizedMerchant]=(a[t.normalizedMerchant]||0)+Number(t.amount);return a;},{})).sort((a,b)=>b[1]-a[1]).slice(0,8);
+        const recurring = byMerchant.filter(([m]) => transactions.filter(t => t.normalizedMerchant === m).length >= 3);
+        const avg = transactions.filter(t=>t.type==="Expense").reduce((s,t)=>s+Number(t.amount),0) / Math.max(1, new Set(transactions.map(t=>t.date?.slice(0,7))).size);
+        const spike = totals.expenses > avg * 1.25;
+        return <div className="space-y-4 slide-up">
+          <Filters />
+          <Card className="p-4"><h2 className="font-black mb-3 text-slate-950 dark:text-white">Category Mix</h2><canvas ref={chartRef} height="260"></canvas></Card>
+          <Card className="p-4"><h2 className="font-black mb-3 text-slate-950 dark:text-white">Merchant Report</h2>{byMerchant.map(([m,v])=><div key={m} className="flex justify-between py-2 text-sm"><span className="font-semibold text-slate-700 dark:text-slate-200">{m}</span><span className="font-black text-slate-950 dark:text-white">{money(v)}</span></div>)}{!byMerchant.length && <Empty text="No merchant spending this month." />}</Card>
+          <Card className="p-4"><h2 className="font-black mb-3 text-slate-950 dark:text-white">Smart Insights</h2><div className="space-y-2 text-sm text-slate-600 dark:text-slate-300"><p>{spike ? "Spending spike detected compared with your historical monthly average." : "This month is within your usual spending range."}</p><p>{recurring.length ? `Possible repeat payments: ${recurring.map(r=>r[0]).join(", ")}.` : "No strong repeat payment pattern detected yet."}</p><p>Cashflow: {money(totals.income)} income, {money(totals.expenses)} expenses, {money(totals.savings)} savings.</p></div></Card>
+        </div>;
+      };
+
+      const SettingsPage = () => <div className="space-y-4 slide-up">
+        <Card className="p-4 space-y-3"><h2 className="font-black text-slate-950 dark:text-white">Google Sheets Sync</h2><input value={sheetUrl} onChange={e=>setSheetUrl(e.target.value)} placeholder="Google Apps Script Web App URL" className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-3 text-sm text-slate-900 dark:text-white" /><div className="flex gap-2"><Button onClick={saveSettings} className="bg-blue-600 text-white flex-1">Save</Button><Button onClick={syncPending} disabled={!sheetUrl || syncing} className="bg-emerald-600 text-white flex-1">{syncing ? "Syncing" : "Retry Sync"}</Button></div><p className="text-xs text-slate-500">Manual rows sync when pending. Imported statement rows sync only after you tag them in Statements. Fingerprints are included so your script can reject duplicates server-side too.</p>{lastSync && <p className="text-xs text-slate-500">Last sync: {new Date(lastSync).toLocaleString("en-IN")}</p>}</Card>
+        <Card className="p-4 space-y-3"><h2 className="font-black text-slate-950 dark:text-white">Category Learning Rules</h2><textarea value={rulesText} onChange={e=>setRulesText(e.target.value)} rows="9" className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-3 font-mono text-xs text-slate-900 dark:text-white" /><Button onClick={saveSettings} className="bg-slate-900 dark:bg-white text-white dark:text-slate-900 w-full">Save Rules</Button></Card>
+        <Card className="p-4 space-y-3"><h2 className="font-black text-slate-950 dark:text-white">Data Management</h2><div className="grid grid-cols-2 gap-2"><Button onClick={exportCSV} className="bg-emerald-600 text-white"><Icon name="Download" /> CSV</Button><Button onClick={backupJSON} className="bg-blue-600 text-white"><Icon name="Download" /> Backup</Button><label className="rounded-xl px-4 py-3 font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-center cursor-pointer">Restore<input type="file" accept=".json" className="hidden" onChange={e=>e.target.files[0]&&restoreJSON(e.target.files[0])} /></label><Button onClick={async()=>{ if(confirm("Clear all local data?")) { await clearStore(db,"transactions"); await clearStore(db,"statements"); await refresh(); } }} className="bg-rose-600 text-white">Clear</Button></div><p className="text-xs text-slate-500">Stored locally: {transactions.length} transactions, {statements.length} statement files, approximately {(JSON.stringify(transactions).length/1024).toFixed(1)} KB.</p></Card>
+      </div>;
+
+      const Empty = ({ text }) => <div className="py-10 text-center text-sm text-slate-500">{text}</div>;
+      const ManualModal = () => showForm && <div className="fixed inset-0 z-50 bg-slate-950/60 p-4 grid place-items-end sm:place-items-center">
+        <Card className="w-full max-w-lg p-5 slide-up">
+          <div className="flex justify-between items-center mb-4"><h2 className="text-xl font-black text-slate-950 dark:text-white">Add Manual Expense</h2><button onClick={()=>setShowForm(false)}><Icon name="X" /></button></div>
+          <div className="grid grid-cols-2 gap-3">
+            <input type="date" value={form.date} onChange={e=>setForm({...form,date:e.target.value})} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-3 text-slate-900 dark:text-white" />
+            <select value={form.type} onChange={e=>setForm({...form,type:e.target.value})} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-3 text-slate-900 dark:text-white"><option>Expense</option><option>Income</option><option>Savings</option></select>
+            <input value={form.merchant} onChange={e=>setForm({...form,merchant:e.target.value})} placeholder="Merchant or note" className="col-span-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-3 text-slate-900 dark:text-white" />
+            <input type="number" value={form.amount} onChange={e=>setForm({...form,amount:e.target.value})} placeholder="Amount" className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-3 text-slate-900 dark:text-white" />
+            <select value={form.category} onChange={e=>setForm({...form,category:e.target.value})} className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-3 text-slate-900 dark:text-white">{CATEGORIES.map(c=><option key={c}>{c}</option>)}</select>
+            <textarea value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} placeholder="Notes" className="col-span-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-3 text-slate-900 dark:text-white" />
+          </div>
+          <Button onClick={addManual} className="mt-4 w-full bg-blue-600 text-white">Save Transaction</Button>
+        </Card>
+      </div>;
+
+      if (!ready) return <div className="min-h-screen grid place-items-center bg-slate-950 text-white"><div className="text-center"><div className="h-14 w-14 rounded-2xl skeleton mx-auto mb-4"></div><p className="font-bold">Opening secure local vault...</p></div></div>;
+      const content = { dashboard: <Dashboard />, history: <History />, statements: <Statements />, reports: <Reports />, settings: <SettingsPage /> }[tab];
+      const nav = [["dashboard","Home","Home"],["history","History","Clock"],["statements","Statements","Upload"],["reports","Reports","Chart"],["settings","Settings","Settings"]];
+      return <div className="min-h-screen bg-slate-100 dark:bg-slate-950 pb-28">
+        <header className="sticky top-0 z-30 glass border-b border-white/40 dark:border-slate-800">
+          <div className="max-w-5xl mx-auto px-4 py-4 flex items-center gap-3">
+            <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-teal-600 to-blue-700 grid place-items-center text-white font-black">₹</div>
+            <div className="min-w-0 flex-1"><h1 className="font-black text-lg text-slate-950 dark:text-white">Expense Tracker Pro</h1><p className="text-xs text-slate-500">{online ? "Online" : "Offline"} • {totals.needsTag} need tags • {totals.pending} queued</p></div>
+            <button onClick={()=>setDark(!dark)} className="h-11 w-11 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 grid place-items-center text-slate-700 dark:text-slate-200"><Icon name="Moon" /></button>
+          </div>
+        </header>
+        <main className="max-w-5xl mx-auto px-4 py-5">{content}</main>
+        <button onClick={()=>setShowForm(true)} className="fixed right-5 bottom-24 z-40 h-16 w-16 rounded-3xl bg-blue-600 text-white grid place-items-center soft-shadow active:scale-95" title="Add manual expense"><Icon name="Plus" size={30} /></button>
+        <nav className="fixed bottom-0 inset-x-0 z-40 glass border-t border-slate-200 dark:border-slate-800">
+          <div className="max-w-5xl mx-auto grid grid-cols-5 gap-1 px-2 py-2">
+            {nav.map(([id,label,icon]) => <button key={id} onClick={()=>setTab(id)} className={`py-2 rounded-2xl flex flex-col items-center gap-1 text-[11px] font-bold ${tab===id ? "bg-blue-600 text-white" : "text-slate-600 dark:text-slate-300"}`}><Icon name={icon} size={21} /><span>{label}</span></button>)}
+          </div>
+        </nav>
+        <ManualModal />
+        {toast && <div className="fixed left-4 right-4 bottom-24 z-50 max-w-lg mx-auto rounded-2xl bg-slate-950 text-white px-4 py-3 text-sm font-semibold soft-shadow">{toast}</div>}
+      </div>;
+    }
+    ReactDOM.render(<App />, document.getElementById("root"));
+  </script>
+</body>
+</html>
